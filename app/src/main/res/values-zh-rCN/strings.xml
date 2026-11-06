@@ -36,6 +36,7 @@
     <string name="toast_reject_2">你是来找我吵架的吗？</string>
     <string name="toast_reject_3">（跪着哭泣）</string>
     <string name="toast_accept_thanks">感谢您让我占用宝贵的时间！</string>
+    <string name="toast_accept_permanent">好啦，以后不提醒你了，尽情使用吧！</string>
 
     <!-- 设置对话框：版面布局设置 -->
     <string name="settings_title">时钟设置</string>

@@ -1500,7 +1500,9 @@ fun NonFoldableDialog(
         stringResource(R.string.toast_reject_2),
         stringResource(R.string.toast_reject_3)
     )
+
     val acceptThanksText = stringResource(R.string.toast_accept_thanks)
+    val acceptPermanentText = stringResource(R.string.toast_accept_permanent)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1520,6 +1522,7 @@ fun NonFoldableDialog(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // 1. 大字標題
                 Text(
                     text = stringResource(R.string.non_fold_dialog_title),
                     color = Color.White,
@@ -1530,6 +1533,7 @@ fun NonFoldableDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                // 2. 小字內容
                 Text(
                     text = stringResource(R.string.non_fold_dialog_desc),
                     color = Color(0xFFC4C4CC),
@@ -1541,6 +1545,7 @@ fun NonFoldableDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                // 3. 社群圓形按鈕
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1580,6 +1585,7 @@ fun NonFoldableDialog(
 
                 Spacer(modifier = Modifier.height(22.dp))
 
+                // 4. 拒絕按鈕
                 Surface(
                     onClick = {
                         val randomToast = rejectToasts[Random.nextInt(rejectToasts.size)]
@@ -1604,9 +1610,17 @@ fun NonFoldableDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // 5. 同意放行按鈕（計數與 Toast 切換核心邏輯）
                 Surface(
                     onClick = {
-                        Toast.makeText(context, acceptThanksText, Toast.LENGTH_SHORT).show()
+                        val prefs = context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+                        val currentCount = prefs.getInt("pref_non_fold_bypass_count", 0) + 1
+                        prefs.edit().putInt("pref_non_fold_bypass_count", currentCount).apply()
+
+                        // 第 3 次按下時，跳出解鎖終身放行的專屬 Toast
+                        val toastMsg = if (currentCount >= 3) acceptPermanentText else acceptThanksText
+                        Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
+
                         onDismiss()
                         onAccept()
                     },
@@ -4871,17 +4885,33 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         if (!hasHingeSensor) {
             foldState = "NO_HINGE"
+            val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+            val bypassCount = prefs.getInt("pref_non_fold_bypass_count", 0)
+            if (bypassCount >= 3) {
+                isNonFoldableBypassed = true
+                showClockScreen = true
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
         }
 
         setContent {
             MaterialTheme(colorScheme = DeskClockColorScheme) {
                 BackHandler(enabled = showClockScreen) {
-                    isRearDisplayActive = false
-                    isNonFoldableBypassed = false
-                    showClockScreen = false
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    safelyResetDeviceState()
+                    val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+                    val bypassCount = prefs.getInt("pref_non_fold_bypass_count", 0)
+
+                    // 若是非摺疊機且已達成永久放行門檻，按返回鍵直接退出整個 App
+                    if (!hasHingeSensor && bypassCount >= 3) {
+                        finish()
+                    } else {
+                        // 一般大摺疊機：恢復原本狀態並退回引導頁面
+                        isRearDisplayActive = false
+                        isNonFoldableBypassed = false
+                        showClockScreen = false
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        safelyResetDeviceState()
+                    }
                 }
 
                 if (showClockScreen) {
@@ -4911,6 +4941,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             sensorManager.unregisterListener(this)
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
+
+        // 從後台切回 APP 時，若正在時鐘介面，重新恢復全螢幕沉浸模式
+        if (showClockScreen) {
+            setImmersiveMode(window, true)
+            val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+            val isPermanentBypass = !hasHingeSensor && prefs.getInt("pref_non_fold_bypass_count", 0) >= 3
+            if (isPermanentBypass) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 只要視窗重新拿到焦點 (從桌面切回、手勢動畫結束等)，且處於時鐘畫面，就強制壓下狀態欄
+        if (hasFocus && showClockScreen) {
+            setImmersiveMode(window, true)
+        }
     }
 
     override fun onPause() {
@@ -4924,7 +4972,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onStop() {
         super.onStop()
         sensorManager.unregisterListener(this)
-        // 離開 APP 時無條件釋放全域覆寫鎖定，防止系統全域鎖定在外螢幕
+
+        val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+        val isPermanentBypass = !hasHingeSensor && prefs.getInt("pref_non_fold_bypass_count", 0) >= 3
+
+        // 如果是已永久放行的非摺疊機，按 Home 鍵退回後台時，不要重置 showClockScreen
+        if (isPermanentBypass) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            setImmersiveMode(window, false)
+            return
+        }
+
+        // 一般大摺疊機：離開 APP 時釋放全域覆寫鎖定並重置狀態
         if (isRearDisplayActive || showClockScreen) {
             isRearDisplayActive = false
             showClockScreen = false

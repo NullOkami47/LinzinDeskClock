@@ -35,6 +35,7 @@
     <string name="toast_reject_2">Did you come here just to pick a fight with me?</string>
     <string name="toast_reject_3">(Crying on my knees)</string>
     <string name="toast_accept_thanks">Thank you for letting me take up your precious time!</string>
+    <string name="toast_accept_permanent">Alright, I won\'t bother you again. Enjoy!</string>
 
     <!-- Settings Dialog: Layout Section -->
     <string name="settings_title">Clock Settings</string>
