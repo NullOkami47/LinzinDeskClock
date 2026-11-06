@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Linzin 桌面時鐘</string>
+
+    <string name="initial_prompt_fold">請將手機半摺\n以在外螢幕啟用桌面時鐘</string>
+
+    <!-- 手勢教學引導遮罩 -->
+    <string name="tutorial_title">手勢操作指南</string>
+    <string name="tutorial_single_tap_title">單指單觸</string>
+    <string name="tutorial_single_tap_desc">喚出設定與介面鎖定按鈕</string>
+    <string name="tutorial_double_tap_title">單指雙擊</string>
+    <string name="tutorial_double_tap_desc">切換秒數顯示 / 隱藏</string>
+    <string name="tutorial_two_finger_tap_title">雙指單擊</string>
+    <string name="tutorial_two_finger_tap_desc">切換時鐘造型樣式</string>
+    <string name="tutorial_swipe_title">上下滑動</string>
+    <string name="tutorial_swipe_desc">在區塊內無縫切換分頁</string>
+    <string name="tutorial_do_not_show_again">不再顯示</string>
+    <string name="tutorial_btn_close">我知道了</string>
+
+    <!-- 版面引導提示遮罩 -->
+    <string name="layout_tip_title">探索多種螢幕版面</string>
+    <string name="layout_tip_desc">除了全螢幕時鐘外，你隨時可以在「設定」中切換成雙區塊版面，一邊看時鐘、一邊同步掌握迷你月曆與即時天氣！</string>
+    <string name="layout_tip_single">單一區塊</string>
+    <string name="layout_tip_dual_left">雙區塊 (左大右小)</string>
+    <string name="layout_tip_dual_right">雙區塊 (右大左小)</string>
+
+    <!-- 非摺疊裝置彩蛋與提示 -->
+    <string name="btn_not_foldable">不是大摺疊機？</string>
+    <string name="toast_liar_foldable">別騙人了，你明明就是大摺</string>
+    <string name="pref_hinge_unsupported">此裝置不具備轉軸感應器，非摺疊機</string>
+    <string name="non_fold_dialog_title">哎呀...真可惜呢...</string>
+    <string name="non_fold_dialog_desc">此 APP 是針對大摺疊機所設計的，一般手機不具備讀取轉軸角度數值功能，是沒辦法觸發進入桌面時鐘模式的。\n但...如果你願意幫我衝一下人氣，追蹤我的社群平台，那我或許可以考慮給你個例外...🤔</string>
+    <string name="non_fold_btn_reject">滿腦子都只想到自己呢</string>
+    <string name="non_fold_btn_accept">求求你，我什麼都願意做的</string>
+    <string name="toast_reject_1">真不敢相信...</string>
+    <string name="toast_reject_2">你是來找我吵架的嗎？</string>
+    <string name="toast_reject_3">（跪著哭泣）</string>
+    <string name="toast_accept_thanks">感謝您讓我佔用寶貴的時間！</string>
+
+    <!-- 設定對話框：版面佈局設定 -->
+    <string name="settings_title">時鐘設定</string>
+    <string name="layout_section_title">螢幕區塊版面</string>
+    <string name="layout_single">單區塊模式 (100% 全螢幕)</string>
+    <string name="layout_dual_left">雙區塊模式 (左大 70% : 右小 30%)</string>
+    <string name="layout_dual_right">雙區塊模式 (左小 30% : 右大 70%)</string>
+
+    <!-- 設定對話框：天氣資訊設定 -->
+    <string name="pref_weather_title">啟用當地天氣資訊</string>
+    <string name="pref_weather_desc">在次要小區塊顯示當前天氣與 4 小時預報 (開啟將請求位置授權)</string>
+    <string name="temp_unit_switch">溫標切換</string>
+    <string name="temp_unit_c">攝氏度 (°C)</string>
+    <string name="temp_unit_f">華氏度 (°F)</string>
+    <string name="city_default">新竹市</string>
+    <string name="current_location">目前位置</string>
+    <string name="weather_disabled_title">尚未啟用天氣資訊</string>
+    <string name="weather_disabled_desc">請點擊右上角 ⚙ 設定\n開啟「啟用當地天氣資訊」\n並授予位置權限即可顯示</string>
+
+    <!-- 設定對話框：行事曆行程設定 -->
+    <string name="pref_calendar_title">顯示行事曆近期行程</string>
+    <string name="pref_calendar_desc">在月曆小區塊列出未來 48 小時內最多 3 筆行程 (開啟將請求行事曆存取授權)</string>
+
+    <!-- 設定對話框：時鐘顯示偏好與角落資訊 -->
+    <string name="pref_24h_title">24 小時制</string>
+    <string name="pref_24h_desc_on">已啟用 (隱藏 AM/PM)</string>
+    <string name="pref_24h_desc_off">12 小時制 (顯示 AM/PM)</string>
+    <string name="pref_battery_title">顯示電量資訊</string>
+    <string name="pref_battery_desc">在畫面左上角常駐顯示 % 數與電池狀態</string>
+    <string name="pref_corner_date_title">顯示角落日期</string>
+    <string name="pref_corner_date_desc">在時鐘左下角顯示當前日期星期標籤</string>
+    <string name="pref_hinge_title">顯示轉軸角度 (Hinge)</string>
+    <string name="pref_hinge_desc">在時鐘右下角顯示即時轉軸摺疊角度</string>
+
+    <!-- 設定對話框：螢幕防護、亮度與休眠控制 -->
+    <string name="pref_burn_in_title">螢幕防烙印機制</string>
+    <string name="pref_burn_in_desc">定時微幅抖動畫面像素以保護 OLED 螢幕 (預設開啟)</string>
+    <string name="pref_brightness_title">手動調整亮度</string>
+    <string name="pref_brightness_desc_manual">自訂視窗亮度</string>
+    <string name="pref_brightness_desc_auto">跟隨系統自動設定</string>
+    <string name="brightness_value">亮度數值</string>
+    <string name="pref_timeout_title">閒置自動關閉螢幕</string>
+    <string name="pref_timeout_desc">若時鐘逾時設定短於系統休眠，將在倒數完畢後進入「黑屏偽休眠」以達到省電效果，碰觸螢幕即可喚醒。</string>
+    <string name="timeout_1m">1 分鐘</string>
+    <string name="timeout_3m">3 分鐘</string>
+    <string name="timeout_10m">10 分鐘</string>
+    <string name="timeout_30m">30 分鐘</string>
+    <string name="timeout_1h">1 小時</string>
+    <string name="timeout_3h">3 小時</string>
+    <string name="timeout_never">無限制 (永不關閉)</string>
+
+    <!-- 設定對話框：說明指南連結 -->
+    <string name="pref_tutorial_title">手勢操作指南</string>
+    <string name="pref_tutorial_desc">查看所有手勢操作指令與快速切換技巧</string>
+
+    <!-- 智慧建議：切換雙區塊對話框 -->
+    <string name="layout_switch_dialog_title">建議開啟雙區塊版面</string>
+    <string name="layout_switch_dialog_desc">您目前處於「單一全螢幕」時鐘模式，天氣與行事曆資訊需在「雙區塊」模式下才會顯示於側邊小區塊。\n\n是否要同步切換為雙區塊版面？</string>
+    <string name="layout_switch_opt_no">否，維持單一區塊</string>
+    <string name="layout_switch_opt_left">是（左大右小）</string>
+    <string name="layout_switch_opt_right">是（右大左小）</string>
+
+</resources>

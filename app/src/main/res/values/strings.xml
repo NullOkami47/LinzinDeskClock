@@ -1,0 +1,103 @@
+<resources>
+    <string name="app_name">Linzin Desk Clock</string>
+
+    <string name="initial_prompt_fold">Please fold the device halfway\nto activate Desk Clock on the cover screen.</string>
+
+    <!-- Gesture Tutorial Overlay -->
+    <string name="tutorial_title">Gesture Guide</string>
+    <string name="tutorial_single_tap_title">Single Tap</string>
+    <string name="tutorial_single_tap_desc">Show settings &amp; lock buttons</string>
+    <string name="tutorial_double_tap_title">Double Tap</string>
+    <string name="tutorial_double_tap_desc">Toggle seconds display</string>
+    <string name="tutorial_two_finger_tap_title">Two-Finger Tap</string>
+    <string name="tutorial_two_finger_tap_desc">Switch clock style</string>
+    <string name="tutorial_swipe_title">Swipe Up / Down</string>
+    <string name="tutorial_swipe_desc">Switch widget pages</string>
+    <string name="tutorial_do_not_show_again">Don\'t show again</string>
+    <string name="tutorial_btn_close">Got it</string>
+
+    <!-- Layout Tip Overlay -->
+    <string name="layout_tip_title">More Layout Options</string>
+    <string name="layout_tip_desc">Looking for more information? You can switch to split layouts (Clock + Calendar / Weather) anytime in the Settings menu!</string>
+    <string name="layout_tip_single">Full Screen</string>
+    <string name="layout_tip_dual_left">Split (Left Large)</string>
+    <string name="layout_tip_dual_right">Split (Right Large)</string>
+
+    <!-- Non-foldable Easter Egg & Dialog -->
+    <string name="btn_not_foldable">Not a book-style foldable?</string>
+    <string name="toast_liar_foldable">Cut the crap, you\'re literally using a book-style foldable!</string>
+    <string name="pref_hinge_unsupported">This device lacks a hinge angle sensor (Not a foldable).</string>
+    <string name="non_fold_dialog_title">Oh no... what a pity...</string>
+    <string name="non_fold_dialog_desc">This app is designed specifically for large foldable phones. Regular smartphones cannot detect hinge angles, so desk clock mode normally won\'t trigger.\n\nHowever... if you\'re willing to help boost my popularity by following my social platforms, I might consider making an exception for you... 🤔</string>
+    <string name="non_fold_btn_reject">You only ever think about yourself, don\'t you?</string>
+    <string name="non_fold_btn_accept">Please, I\'ll do anything you want!</string>
+    <string name="toast_reject_1">I can\'t believe this...</string>
+    <string name="toast_reject_2">Did you come here just to pick a fight with me?</string>
+    <string name="toast_reject_3">(Crying on my knees)</string>
+    <string name="toast_accept_thanks">Thank you for letting me take up your precious time!</string>
+
+    <!-- Settings Dialog: Layout Section -->
+    <string name="settings_title">Clock Settings</string>
+    <string name="layout_section_title">Screen Layout</string>
+    <string name="layout_single">Single Block (100% Fullscreen)</string>
+    <string name="layout_dual_left">Dual Block (Left 70% : Right 30%)</string>
+    <string name="layout_dual_right">Dual Block (Left 30% : Right 70%)</string>
+
+    <!-- Settings Dialog: Weather Options -->
+    <string name="pref_weather_title">Enable Local Weather</string>
+    <string name="pref_weather_desc">Show current weather and 4-hour forecast in side widget (Requires location permission)</string>
+    <string name="temp_unit_switch">Temperature Unit</string>
+    <string name="temp_unit_c">Celsius (°C)</string>
+    <string name="temp_unit_f">Fahrenheit (°F)</string>
+    <string name="city_default">Hsinchu</string>
+    <string name="current_location">Current Location</string>
+    <string name="weather_disabled_title">Weather Disabled</string>
+    <string name="weather_disabled_desc">Tap ⚙ Settings in top right\nto enable Local Weather\nand grant location access.</string>
+
+    <!-- Settings Dialog: Calendar Events -->
+    <string name="pref_calendar_title">Show Upcoming Calendar Events</string>
+    <string name="pref_calendar_desc">List up to 3 events in the next 48h in side widget (Requires calendar permission)</string>
+    <string name="event_all_day_today">Today All-day</string>
+    <string name="event_all_day">All-day</string>
+    <string name="event_untitled">Untitled</string>
+
+    <!-- Settings Dialog: Time & Corner Display Options -->
+    <string name="pref_24h_title">24-Hour Format</string>
+    <string name="pref_24h_desc_on">Enabled (Hides AM/PM)</string>
+    <string name="pref_24h_desc_off">12-Hour Format (Shows AM/PM)</string>
+    <string name="pref_battery_title">Show Battery Status</string>
+    <string name="pref_battery_desc">Show percentage and charging status at top-left</string>
+    <string name="pref_corner_date_title">Show Corner Date</string>
+    <string name="pref_corner_date_desc">Show date and weekday label at bottom-left</string>
+    <string name="pref_hinge_title">Show Hinge Angle</string>
+    <string name="pref_hinge_desc">Show real-time fold angle at bottom-right</string>
+
+    <!-- Settings Dialog: Screen Protection, Brightness & Timeout -->
+    <string name="pref_burn_in_title">Burn-In Protection</string>
+    <string name="pref_burn_in_desc">Subtly dither display periodically to protect OLED panels (Default on)</string>
+    <string name="pref_brightness_title">Manual Brightness</string>
+    <string name="pref_brightness_desc_manual">Custom brightness</string>
+    <string name="pref_brightness_desc_auto">Follow system auto brightness</string>
+    <string name="brightness_value">Brightness</string>
+    <string name="pref_timeout_title">Screen Timeout</string>
+    <string name="pref_timeout_desc">Screen will enter standby blackout to save power when timeout expires. Tap screen to wake.</string>
+    <string name="timeout_1m">1 minute</string>
+    <string name="timeout_3m">3 minutes</string>
+    <string name="timeout_10m">10 minutes</string>
+    <string name="timeout_30m">30 minutes</string>
+    <string name="timeout_1h">1 hour</string>
+    <string name="timeout_3h">3 hours</string>
+    <string name="timeout_never">Never (Keep screen on)</string>
+
+    <!-- Settings Dialog: Gesture Guide Shortcut -->
+    <string name="pref_tutorial_title">Gesture Guide</string>
+    <string name="pref_tutorial_desc">View clock gesture controls &amp; shortcuts</string>
+
+    <!-- Smart Suggestion: Switch to Split Layout Dialog -->
+    <string name="layout_switch_dialog_title">Switch to Split Layout?</string>
+    <string name="layout_switch_dialog_desc">You are currently in \"Full Screen\" mode. Weather and calendar events are displayed in the side panel under \"Split Layout\" modes.\n\nWould you like to switch to a split layout now?</string>
+    <string name="layout_switch_opt_no">No, keep single</string>
+    <string name="layout_switch_opt_left">Yes (Left Large)</string>
+    <string name="layout_switch_opt_right">Yes (Right Large)</string>
+
+</resources>
