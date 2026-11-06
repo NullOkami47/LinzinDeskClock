@@ -2260,7 +2260,7 @@ fun InitialScreen(
     val youtubeUrl = "https://www.youtube.com/@Linzin"
     val facebookUrl = "https://www.facebook.com/linzin86/"
     val instagramUrl = "https://www.instagram.com/linzin.yt"
-    val githubUrl = "https://github.com"
+    val githubUrl = "https://github.com/linzin86/LinzinDeskClock/"
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -4934,6 +4934,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
     }
+
 
     override fun onResume() {
         super.onResume()

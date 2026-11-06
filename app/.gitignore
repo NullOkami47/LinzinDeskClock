@@ -1,3 +1,5 @@
 /build
 *.apk
 app/release/
+.idea/
+*.iml
