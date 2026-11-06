@@ -12,10 +12,12 @@
 
 </div>
 
+<br/>
+
 <div align="center">
 
 <a href="https://github.com/linzin86/LinzinDeskClock/releases/">
-  <img src="https://img.shields.io/badge/下載最新版本_APK-v1.0.0-81C7D4?style=for-the-badge&logo=android&logoColor=5DAC81&labelColor=81C7D4" alt="Download APK" height="42" />
+  <img src="https://img.shields.io/badge/下載最新版本_APK-81C7D4?style=for-the-badge&logo=android&logoColor=5DAC81&labelColor=81C7D4" alt="Download APK" height="60" />
 </a>
 
 </div>
