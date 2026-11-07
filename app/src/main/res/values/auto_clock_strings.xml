@@ -1,0 +1,34 @@
+<resources>
+    <string name="auto_title">Automatic Desk Clock</string>
+    <string name="auto_description">For normal phones: after locking, scan for up to 5 seconds. Landscape and a 30°–75° desk tilt must stay stable for 1.5 seconds. Moving or charging an unlocked phone never starts the clock.</string>
+    <string name="auto_enable">Enable lock-triggered monitoring</string>
+    <string name="auto_wireless">Wireless charging only</string>
+    <string name="auto_any_power">Wired or wireless charging</string>
+    <string name="auto_no_power">No charging requirement</string>
+    <string name="auto_foldable_unchanged">Foldable hinge mode remains unchanged. This monitor is only for phones without a hinge sensor.</string>
+    <string name="auto_status_disabled">Monitoring is off. Manual entry and screen-saver setup remain available.</string>
+    <string name="auto_status_failed">Android did not allow the monitor to start. Retry here while the app is visible.</string>
+    <string name="auto_status_restart">Monitoring is enabled but not running. Tap Resume monitoring after a restart or system stop.</string>
+    <string name="auto_status_notifications">Monitoring is running; notifications are blocked. The background tap-to-open fallback is unavailable.</string>
+    <string name="auto_status_ready">Monitoring is running. The current app window can be offered the clock after locking; background use offers a notification.</string>
+    <string name="auto_restart">Resume monitoring</string>
+    <string name="auto_notification_setup">Notification settings</string>
+    <string name="auto_media_granted">Media notification access is enabled.</string>
+    <string name="auto_media_missing">Enable notification access to control active media sessions.</string>
+    <string name="auto_media_setup">Set up media notification access</string>
+    <string name="auto_media_privacy">Hide media details and artwork on the lock screen</string>
+    <string name="auto_dream_setup">Configure system screen saver</string>
+    <string name="auto_dream_description">Choose Linzin Desk Clock in the system screen-saver settings. On supported devices the system starts it while charging or docked; the same posture and charging checks apply. Exit with the top-right button or a long swipe up from the bottom edge.</string>
+    <string name="auto_platform_limit">Android and manufacturer power rules can prevent automatic display or sensor delivery. A foreground notification keeps monitoring visible; it does not grant background launch permission. No root, Shizuku, overlays or accessibility access is required. Unlock before the next attempt after exiting.</string>
+    <string name="auto_settings_unavailable">This system settings page is unavailable on this device.</string>
+    <string name="auto_monitor_channel">Desk clock monitoring</string>
+    <string name="auto_offer_channel">Desk clock ready</string>
+    <string name="auto_monitor_title">Automatic desk clock is enabled</string>
+    <string name="auto_monitor_body">Waiting for the next lock. Sensors are off between attempts.</string>
+    <string name="auto_disable">Stop monitoring</string>
+    <string name="auto_offer_title">Desk clock is ready</string>
+    <string name="auto_offer_body">Tap within 30 seconds to show the clock over the secure lock screen.</string>
+    <string name="auto_exit">Exit desk clock</string>
+    <string name="auto_sensor_missing">No gravity or accelerometer sensor is available. Automatic posture detection cannot run on this device.</string>
+    <string name="auto_ui_lock">Toggle clock control lock</string>
+</resources>

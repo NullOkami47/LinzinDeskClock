@@ -42,8 +42,8 @@
     <string name="settings_title">时钟设置</string>
     <string name="layout_section_title">屏幕区块布局</string>
     <string name="layout_single">单区块模式 (100% 全屏)</string>
-    <string name="layout_dual_left">双区块模式 (左大 70% : 右小 30%)</string>
-    <string name="layout_dual_right">双区块模式 (左小 30% : 右大 70%)</string>
+    <string name="layout_dual_left">双区块（时钟在左，可拖动分隔线）</string>
+    <string name="layout_dual_right">双区块（时钟在右，可拖动分隔线）</string>
 
     <!-- 设置对话框：天气信息设置 -->
     <string name="pref_weather_title">启用当地天气信息</string>

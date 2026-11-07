@@ -1,0 +1,96 @@
+{
+  "applicationId": "com.linzin.linzindeskclock",
+  "versionName": "2.0",
+  "versionCode": 2,
+  "compileSdk": 37,
+  "minSdk": 31,
+  "checkedAt": "2026-11-08",
+  "apkSha256": "7437ed7941576badd4e2bb25ef9ca266ea5433544d84a4e599f1dbb58855beb7",
+  "unitSuites": [
+    {
+      "name": "com.linzin.linzindeskclock.autostart.ClockActivationStateMachineTest",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.autostart.ClockCycleStoreTest",
+      "tests": 39,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.autostart.PendingLockScanTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.ExampleUnitTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.layout.SplitLayoutGeometryTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.layout.SplitLayoutPreferencesTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.layout.SplitLayoutStateTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.media.ArtworkGeometryTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.media.MediaLogicTest",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.sensors.ActivationEligibilityTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0
+    },
+    {
+      "name": "com.linzin.linzindeskclock.sensors.SensorTimingTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0
+    }
+  ],
+  "unitTests": 120,
+  "instrumentation": {
+    "api": 35,
+    "tests": 28,
+    "failures": 0,
+    "skips": 0,
+    "log": ".local/instrumentation-api35-final.log"
+  },
+  "buildLog": ".local/final-build.log",
+  "lint": {
+    "errors": 0,
+    "warnings": 94,
+    "hints": 4
+  },
+  "realDevice": {
+    "installed": false,
+    "launched": false,
+    "verification": "Pending final install; no personal-device runtime validation authorised."
+  }
+}

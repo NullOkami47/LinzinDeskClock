@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_notification_listener_label">桌鐘媒體存取</string>
+    <string name="media_access_settings_title">媒體通知存取權</string>
+    <string name="media_access_settings_summary">允許通知存取，以顯示及控制目前的媒體工作階段。不會儲存通知內容。</string>
+    <string name="media_access_open_settings">開啟通知存取設定</string>
+    <string name="media_permission_required">尚未開啟媒體存取</string>
+    <string name="media_permission_settings_hint">請在解鎖後，從桌鐘設定開啟通知存取權。</string>
+    <string name="media_connecting">正在連線至媒體工作階段⋯</string>
+    <string name="media_unavailable">暫時無法取得媒體工作階段</string>
+    <string name="media_no_session">目前沒有媒體工作階段</string>
+    <string name="media_no_session_hint">在媒體 App 開始播放，即可在此顯示。</string>
+    <string name="media_hidden">鎖定時隱藏媒體資訊</string>
+    <string name="media_starting">媒體</string>
+    <string name="media_no_artwork">無專輯封面</string>
+    <string name="media_unknown_title">未知曲目</string>
+    <string name="media_unknown_artist">未知演出者</string>
+    <string name="media_play">播放</string>
+    <string name="media_pause">暫停</string>
+    <string name="media_toggle">切換播放或暫停</string>
+    <string name="media_previous">上一首</string>
+    <string name="media_next">下一首</string>
+    <string name="media_seek">播放位置</string>
+    <string name="media_unknown_time">–:––</string>
+    <string name="media_progress_description">%1$s／%2$s</string>
+    <string name="media_controls_locked">解鎖後即可控制播放</string>
+    <string name="media_controls_ui_locked">播放控制已鎖定</string>
+    <string name="media_controls_unavailable">播放器未提供可用的控制功能</string>
+    <string name="media_state_playing">播放中</string>
+    <string name="media_state_paused">已暫停</string>
+    <string name="media_state_buffering">緩衝中⋯</string>
+    <string name="media_state_connecting">連線中⋯</string>
+    <string name="media_state_stopped">已停止</string>
+    <string name="media_state_error">無法播放</string>
+    <string name="media_state_idle">待命中</string>
+</resources>

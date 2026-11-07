@@ -110,3 +110,14 @@
 </p>
 
 </div>
+
+## Version 2 implementation
+
+The v2 branch adds lock-triggered desk-clock monitoring for normal phones, draggable split layouts and authorised MediaSession controls. Existing foldable hinge thresholds and watch-face assets remain intact.
+
+- [Setup and platform limitations](docs/v2-user-guide.md)
+- [Implementation and validation](docs/v2-implementation-report.md)
+- [Real-device checklist](docs/v2-device-checklist.md)
+- [Build environment](docs/build-environment.md)
+
+Fully automatic display depends on Android and OEM behaviour. Background entry uses a user-action notification; this app does not bypass Keyguard or replace every manufacturer's AOD.

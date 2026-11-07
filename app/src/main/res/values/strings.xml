@@ -41,8 +41,8 @@
     <string name="settings_title">Clock Settings</string>
     <string name="layout_section_title">Screen Layout</string>
     <string name="layout_single">Single Block (100% Fullscreen)</string>
-    <string name="layout_dual_left">Dual Block (Left 70% : Right 30%)</string>
-    <string name="layout_dual_right">Dual Block (Left 30% : Right 70%)</string>
+    <string name="layout_dual_left">Dual panel (clock on the left; drag the divider)</string>
+    <string name="layout_dual_right">Dual panel (clock on the right; drag the divider)</string>
 
     <!-- Settings Dialog: Weather Options -->
     <string name="pref_weather_title">Enable Local Weather</string>

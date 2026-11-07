@@ -1,0 +1,34 @@
+<resources>
+    <string name="auto_title">自動桌面時鐘</string>
+    <string name="auto_description">一般手機鎖定後最多偵測 5 秒；實體橫放、桌面傾角 30°–75° 必須持續穩定 1.5 秒。解鎖時移動或接上電源不會觸發。</string>
+    <string name="auto_enable">啟用鎖定觸發監看</string>
+    <string name="auto_wireless">僅無線充電</string>
+    <string name="auto_any_power">有線或無線充電</string>
+    <string name="auto_no_power">不要求充電</string>
+    <string name="auto_foldable_unchanged">折疊機仍使用原有鉸鏈觸發。此監看僅適用於沒有鉸鏈感測器的一般手機。</string>
+    <string name="auto_status_disabled">監看已關閉，仍可手動進入或設定螢幕保護程式。</string>
+    <string name="auto_status_failed">Android 未允許監看啟動。請在應用程式顯示時於此重試。</string>
+    <string name="auto_status_restart">已啟用但監看未執行。重新開機或系統停止後，請點「恢復監看」。</string>
+    <string name="auto_status_notifications">監看執行中；通知遭封鎖，無法使用背景點擊開啟備援。</string>
+    <string name="auto_status_ready">監看執行中。從本應用程式鎖定時可嘗試顯示時鐘；背景使用會提供通知。</string>
+    <string name="auto_restart">恢復監看</string>
+    <string name="auto_notification_setup">通知設定</string>
+    <string name="auto_media_granted">媒體通知存取已啟用。</string>
+    <string name="auto_media_missing">啟用通知存取以控制正在使用的媒體工作階段。</string>
+    <string name="auto_media_setup">設定媒體通知存取</string>
+    <string name="auto_media_privacy">鎖定畫面隱藏媒體資訊與封面</string>
+    <string name="auto_dream_setup">設定系統螢幕保護程式</string>
+    <string name="auto_dream_description">請在系統螢幕保護程式選擇 Linzin Desk Clock。支援的裝置會在充電或底座模式啟動，仍會檢查姿勢與充電條件。可按右上角按鈕或從底部邊緣向上長滑退出。</string>
+    <string name="auto_platform_limit">Android 與廠商省電規則可能阻止自動顯示或感測資料。前景通知讓監看可見，但不代表取得背景啟動權限。不需要 root、Shizuku、懸浮視窗或無障礙存取。退出後須先解鎖，才會允許下一次嘗試。</string>
+    <string name="auto_settings_unavailable">此裝置無法開啟該系統設定頁面。</string>
+    <string name="auto_monitor_channel">桌面時鐘監看</string>
+    <string name="auto_offer_channel">桌面時鐘已就緒</string>
+    <string name="auto_monitor_title">自動桌面時鐘已啟用</string>
+    <string name="auto_monitor_body">等待下次鎖定。每次偵測結束即關閉感測器。</string>
+    <string name="auto_disable">停止監看</string>
+    <string name="auto_offer_title">桌面時鐘已就緒</string>
+    <string name="auto_offer_body">30 秒內點擊即可在安全鎖定畫面上顯示時鐘。</string>
+    <string name="auto_exit">退出桌面時鐘</string>
+    <string name="auto_sensor_missing">此裝置沒有可用的重力或加速度感測器，無法執行自動姿勢偵測。</string>
+    <string name="auto_ui_lock">切換時鐘操作鎖定</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="split_divider_label">Resize clock and widgets</string>
+    <string name="split_divider_state">Left %1$d%%, right %2$d%%. Clock on the %3$s.</string>
+    <string name="split_divider_locked">%1$s Controls locked.</string>
+    <string name="split_clock_left">left</string>
+    <string name="split_clock_right">right</string>
+    <string name="split_move_left">Move divider left</string>
+    <string name="split_move_right">Move divider right</string>
+</resources>

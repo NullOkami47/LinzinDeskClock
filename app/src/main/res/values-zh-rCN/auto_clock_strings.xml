@@ -1,0 +1,34 @@
+<resources>
+    <string name="auto_title">自动桌面时钟</string>
+    <string name="auto_description">普通手机锁定后最多检测 5 秒；实体横放、桌面倾角 30°–75° 必须持续稳定 1.5 秒。解锁时移动或接通电源不会触发。</string>
+    <string name="auto_enable">启用锁定触发监测</string>
+    <string name="auto_wireless">仅无线充电</string>
+    <string name="auto_any_power">有线或无线充电</string>
+    <string name="auto_no_power">不要求充电</string>
+    <string name="auto_foldable_unchanged">折叠机仍使用原有铰链触发。此监测仅适用于没有铰链传感器的普通手机。</string>
+    <string name="auto_status_disabled">监测已关闭，仍可手动进入或设置屏幕保护程序。</string>
+    <string name="auto_status_failed">Android 未允许监测启动。请在应用显示时在此重试。</string>
+    <string name="auto_status_restart">已启用但监测未运行。重启或系统停止后，请点击“恢复监测”。</string>
+    <string name="auto_status_notifications">监测运行中；通知被阻止，无法使用后台点击打开备用方式。</string>
+    <string name="auto_status_ready">监测运行中。从本应用锁定时可尝试显示时钟；后台使用会提供通知。</string>
+    <string name="auto_restart">恢复监测</string>
+    <string name="auto_notification_setup">通知设置</string>
+    <string name="auto_media_granted">媒体通知访问已启用。</string>
+    <string name="auto_media_missing">启用通知访问以控制正在使用的媒体会话。</string>
+    <string name="auto_media_setup">设置媒体通知访问</string>
+    <string name="auto_media_privacy">锁屏隐藏媒体信息与封面</string>
+    <string name="auto_dream_setup">设置系统屏幕保护程序</string>
+    <string name="auto_dream_description">请在系统屏幕保护程序中选择 Linzin Desk Clock。支持的设备会在充电或底座模式启动，仍会检查姿势和充电条件。可按右上角按钮或从底部边缘向上长滑退出。</string>
+    <string name="auto_platform_limit">Android 与厂商省电规则可能阻止自动显示或传感数据。前台通知让监测可见，但不代表取得后台启动权限。不需要 root、Shizuku、悬浮窗或无障碍访问。退出后须先解锁，才会允许下一次尝试。</string>
+    <string name="auto_settings_unavailable">此设备无法打开该系统设置页面。</string>
+    <string name="auto_monitor_channel">桌面时钟监测</string>
+    <string name="auto_offer_channel">桌面时钟已就绪</string>
+    <string name="auto_monitor_title">自动桌面时钟已启用</string>
+    <string name="auto_monitor_body">等待下次锁定。每次检测结束即关闭传感器。</string>
+    <string name="auto_disable">停止监测</string>
+    <string name="auto_offer_title">桌面时钟已就绪</string>
+    <string name="auto_offer_body">30 秒内点击即可在安全锁屏上显示时钟。</string>
+    <string name="auto_exit">退出桌面时钟</string>
+    <string name="auto_sensor_missing">此设备没有可用的重力或加速度传感器，无法运行自动姿势检测。</string>
+    <string name="auto_ui_lock">切换时钟操作锁定</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="split_divider_label">调整时钟与小组件宽度</string>
+    <string name="split_divider_state">左侧 %1$d%%，右侧 %2$d%%。时钟位于%3$s。</string>
+    <string name="split_divider_locked">%1$s 控件已锁定。</string>
+    <string name="split_clock_left">左侧</string>
+    <string name="split_clock_right">右侧</string>
+    <string name="split_move_left">向左移动分隔线</string>
+    <string name="split_move_right">向右移动分隔线</string>
+</resources>
