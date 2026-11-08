@@ -71,9 +71,20 @@
     <string name="pref_hinge_title">顯示轉軸角度 (Hinge)</string>
     <string name="pref_hinge_desc">在時鐘右下角顯示即時轉軸摺疊角度</string>
 
+    <!-- 語言設定 -->
+    <string name="pref_language_title">語言設定</string>
+    <string name="pref_language_desc">切換程式顯示語言</string>
+    <string name="lang_follow_system">跟隨系統設定</string>
+    <string name="lang_zh_tw">繁體中文</string>
+    <string name="lang_zh_cn">简体中文</string>
+    <string name="lang_ja">日本語</string>
+    <string name="lang_en">English</string>
+
     <!-- 設定對話框：螢幕防護、亮度與休眠控制 -->
     <string name="pref_burn_in_title">螢幕防烙印機制</string>
     <string name="pref_burn_in_desc">定時微幅抖動畫面像素以保護 OLED 螢幕 (預設開啟)</string>
+    <string name="pref_flip_180_title">強制畫面 180° 反轉</string>
+    <string name="pref_flip_180_desc">鎖定螢幕旋轉並反轉 180°，修正小摺疊機外螢幕或帳篷模式畫面倒置問題</string>
     <string name="pref_brightness_title">手動調整亮度</string>
     <string name="pref_brightness_desc_manual">自訂視窗亮度</string>
     <string name="pref_brightness_desc_auto">跟隨系統自動設定</string>

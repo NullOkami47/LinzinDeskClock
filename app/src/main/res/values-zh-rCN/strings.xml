@@ -74,9 +74,20 @@
     <string name="pref_hinge_title">显示转轴角度 (Hinge)</string>
     <string name="pref_hinge_desc">在时钟右下角显示实时转轴折叠角度</string>
 
+    <!-- 语言设置 -->
+    <string name="pref_language_title">语言设置</string>
+    <string name="pref_language_desc">切换应用显示语言</string>
+    <string name="lang_follow_system">跟随系统设置</string>
+    <string name="lang_zh_tw">繁體中文</string>
+    <string name="lang_zh_cn">简体中文</string>
+    <string name="lang_ja">日本語</string>
+    <string name="lang_en">English</string>
+
     <!-- 设置对话框：屏幕防护、亮度与休眠控制 -->
     <string name="pref_burn_in_title">屏幕防烧屏机制</string>
     <string name="pref_burn_in_desc">定时微幅抖动画面像素以保护 OLED 屏幕 (默认开启)</string>
+    <string name="pref_flip_180_title">强制画面 180° 翻转</string>
+    <string name="pref_flip_180_desc">锁定屏幕旋转并翻转 180°，修正小折叠屏外屏或帐篷模式画面倒置问题</string>
     <string name="pref_brightness_title">手动调整亮度</string>
     <string name="pref_brightness_desc_manual">自定义窗口亮度</string>
     <string name="pref_brightness_desc_auto">跟随系统自动设置</string>

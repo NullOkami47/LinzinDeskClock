@@ -73,9 +73,20 @@
     <string name="pref_hinge_title">Show Hinge Angle</string>
     <string name="pref_hinge_desc">Show real-time fold angle at bottom-right</string>
 
+    <!-- Language Settings -->
+    <string name="pref_language_title">Language</string>
+    <string name="pref_language_desc">Change display language</string>
+    <string name="lang_follow_system">System Default</string>
+    <string name="lang_zh_tw">繁體中文</string>
+    <string name="lang_zh_cn">简体中文</string>
+    <string name="lang_ja">日本語</string>
+    <string name="lang_en">English</string>
+
     <!-- Settings Dialog: Screen Protection, Brightness & Timeout -->
     <string name="pref_burn_in_title">Burn-In Protection</string>
     <string name="pref_burn_in_desc">Subtly dither display periodically to protect OLED panels (Default on)</string>
+    <string name="pref_flip_180_title">Force Flip Screen 180°</string>
+    <string name="pref_flip_180_desc">Lock auto-rotation and rotate 180° to fix upside-down display on flip foldables</string>
     <string name="pref_brightness_title">Manual Brightness</string>
     <string name="pref_brightness_desc_manual">Custom brightness</string>
     <string name="pref_brightness_desc_auto">Follow system auto brightness</string>

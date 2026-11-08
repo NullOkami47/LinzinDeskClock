@@ -1,6 +1,7 @@
 package com.linzin.linzindeskclock
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ContentUris
@@ -34,6 +35,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -133,6 +135,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -143,6 +146,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.coroutines.resume
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -152,7 +156,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 // ==========================================
@@ -180,7 +186,7 @@ enum class ClockLayoutMode {
 }
 
 data class HourlyWeather(
-    val timeLabel: String,
+    val hourOfDay: Int,
     val tempC: Float,
     val weatherCode: Int
 )
@@ -202,12 +208,38 @@ data class UpcomingCalendarEvent(
     val timeLabel: String
 )
 
-// ==========================================
-// 2. 系統與硬體互動工具函式
-// ==========================================
+fun setAppLanguage(context: Context, languageCode: String) {
+    // 1. 存入 SharedPreferences 保險
+    context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+        .edit()
+        .putString("pref_app_language", languageCode)
+        .apply()
+
+    // 2. 調用官方相容 API
+    val appLocale: LocaleListCompat = if (languageCode == "system") {
+        LocaleListCompat.getEmptyLocaleList()
+    } else {
+        LocaleListCompat.forLanguageTags(languageCode)
+    }
+    AppCompatDelegate.setApplicationLocales(appLocale)
+}
+
+fun getCurrentLanguageTag(context: Context): String {
+    // 優先讀取保存的設定
+    val saved = context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+        .getString("pref_app_language", null)
+    if (saved != null) return saved
+
+    val currentLocales = AppCompatDelegate.getApplicationLocales()
+    return if (currentLocales.isEmpty) {
+        "system"
+    } else {
+        currentLocales.get(0)?.toLanguageTag() ?: "system"
+    }
+}
 
 /**
- * 查詢未來 48 小時內的日曆行程（自動過濾已結束的事件與過去的全天行程）
+ * 查詢未來 48 小時內的日曆行程（支援單日、跨日全天行程與進行中事件）
  */
 fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
     val hasPermission = ContextCompat.checkSelfPermission(
@@ -250,7 +282,21 @@ fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
 
             val nowCal = Calendar.getInstance().apply { timeInMillis = now }
             val currentYear = nowCal.get(Calendar.YEAR)
+            val currentMonth = nowCal.get(Calendar.MONTH)
+            val currentDay = nowCal.get(Calendar.DAY_OF_MONTH)
             val currentDayOfYear = nowCal.get(Calendar.DAY_OF_YEAR)
+
+            // 本地今天 00:00:00 的時間戳
+            val todayStartLocal = Calendar.getInstance().apply {
+                clear()
+                set(currentYear, currentMonth, currentDay, 0, 0, 0)
+            }.timeInMillis
+
+            // Android 全天行程在底層統一以 UTC 00:00:00 記錄，計算對應的 UTC 今日時間點
+            val todayUtcMidnight = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                clear()
+                set(currentYear, currentMonth, currentDay, 0, 0, 0)
+            }.timeInMillis
 
             while (cursor.moveToNext() && eventList.size < 3) {
                 val title = cursor.getString(titleIdx) ?: context.getString(R.string.event_untitled)
@@ -259,18 +305,16 @@ fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
                 val isAllDay = cursor.getInt(allDayIdx) == 1
 
                 if (isAllDay) {
-                    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                        timeInMillis = beginMillis
-                    }
-                    val eventYear = utcCal.get(Calendar.YEAR)
-                    val eventDayOfYear = utcCal.get(Calendar.DAY_OF_YEAR)
-
-                    if (eventYear < currentYear || (eventYear == currentYear && eventDayOfYear < currentDayOfYear)) {
+                    // 全天行程的 endMillis 是結束日的隔天 00:00 UTC（Exclusive）
+                    // 若結束時間小於等於今日起點，代表昨天或更早以前就結束了，跳過
+                    if (endMillis <= todayUtcMidnight) {
                         continue
                     }
 
-                    val isToday = (eventYear == currentYear && eventDayOfYear == currentDayOfYear)
-                    val label = if (isToday) {
+                    // 只要「開始時間 <= 今天」且「結束時間 > 今天」，代表今天正在該多日行程中
+                    val isCoveringToday = (beginMillis <= todayUtcMidnight && endMillis > todayUtcMidnight)
+
+                    val label = if (isCoveringToday) {
                         context.getString(R.string.event_all_day_today)
                     } else {
                         dayFormat.timeZone = TimeZone.getTimeZone("UTC")
@@ -279,6 +323,7 @@ fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
 
                     eventList.add(UpcomingCalendarEvent(title = title, timeLabel = label))
                 } else {
+                    // 非全天一般行程：已結束則跳過
                     if (endMillis <= now) {
                         continue
                     }
@@ -290,10 +335,19 @@ fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
                     dayFormat.timeZone = TimeZone.getDefault()
                     timeFormat.timeZone = TimeZone.getDefault()
 
-                    val label = if (isToday) {
-                        timeFormat.format(Date(beginMillis))
-                    } else {
-                        "${dayFormat.format(Date(beginMillis))} ${timeFormat.format(Date(beginMillis))}"
+                    val label = when {
+                        // 跨天且今天仍在進行中的行程
+                        beginMillis < todayStartLocal && endMillis > now -> {
+                            context.getString(R.string.event_all_day_today)
+                        }
+                        // 今天內的行程顯示具體開始時間（如 14:00）
+                        isToday -> {
+                            timeFormat.format(Date(beginMillis))
+                        }
+                        // 明後天的行程顯示日期與時間（如 11/9 10:00）
+                        else -> {
+                            "${dayFormat.format(Date(beginMillis))} ${timeFormat.format(Date(beginMillis))}"
+                        }
                     }
 
                     eventList.add(UpcomingCalendarEvent(title = title, timeLabel = label))
@@ -319,6 +373,95 @@ fun executeShellCommand(command: String) {
         } catch (e: Exception) {
             Log.e("FoldDeskClock", "Failed: $command", e)
         }
+    }
+}
+
+/**
+ * 主動獲取最新定位（優先嘗試高時效快取，若無則在 Android 11+ 主動單次定位）
+ */
+@SuppressLint("MissingPermission")
+suspend fun fetchBestLocation(context: Context): Location? = withContext(Dispatchers.IO) {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        ?: return@withContext null
+
+    // 1. 抓取快取
+    val lastLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        ?: locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        ?: locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+
+    // 若快取在 10 分鐘內，直接視為有效位置返回以節省電量
+    if (lastLocation != null && (System.currentTimeMillis() - lastLocation.time) < 10 * 60 * 1000L) {
+        return@withContext lastLocation
+    }
+
+    // 2. Android 11+ (API 30+) 發起主動單次定位（加 5 秒逾時保護，避免無衛星時卡住）
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        try {
+            withTimeoutOrNull(5000L) {
+                suspendCancellableCoroutine<Location?> { cont ->
+                    val cancellationSignal = android.os.CancellationSignal()
+                    cont.invokeOnCancellation { cancellationSignal.cancel() }
+
+                    val provider = if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                        LocationManager.NETWORK_PROVIDER
+                    } else {
+                        LocationManager.GPS_PROVIDER
+                    }
+
+                    locationManager.getCurrentLocation(
+                        provider,
+                        cancellationSignal,
+                        ContextCompat.getMainExecutor(context)
+                    ) { loc ->
+                        if (cont.isActive) {
+                            cont.resume(loc ?: lastLocation)
+                        }
+                    }
+                }
+            } ?: lastLocation
+        } catch (e: Exception) {
+            lastLocation
+        }
+    } else {
+        lastLocation
+    }
+}
+
+/**
+ * 整合抓取定位、反向地理編碼與 Open-Meteo 天氣
+ */
+suspend fun fetchAndApplyWeather(
+    context: Context,
+    currentLocationStr: String,
+    onResult: (WeatherInfo?) -> Unit
+) = withContext(Dispatchers.IO) {
+    try {
+        val location = fetchBestLocation(context)
+        val lat = location?.latitude ?: 24.838
+        val lon = location?.longitude ?: 121.017
+
+        // 預設採用「目前位置」，即便 Geocoder 逾時或失敗也不會死板卡在「新竹市」
+        var detectedCity = currentLocationStr
+        try {
+            val geocoder = Geocoder(context, Locale.getDefault())
+            val addresses = geocoder.getFromLocation(lat, lon, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val addr = addresses[0]
+                detectedCity = addr.locality
+                    ?: addr.subAdminArea
+                            ?: addr.adminArea
+                            ?: currentLocationStr
+            }
+        } catch (e: Exception) {
+            detectedCity = currentLocationStr
+        }
+
+        val data = fetchOpenMeteoWeather(lat, lon, detectedCity)
+        withContext(Dispatchers.Main) {
+            onResult(data)
+        }
+    } catch (e: Exception) {
+        Log.e("DeskClockWeather", "Failed to fetch and apply weather", e)
     }
 }
 
@@ -350,7 +493,6 @@ suspend fun fetchOpenMeteoWeather(lat: Double, lon: Double, cityName: String): W
 
         val hourlyResult = mutableListOf<HourlyWeather>()
         val inFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US)
-        val outFormat = SimpleDateFormat("ha", Locale.US)
 
         for (i in 0 until times.length()) {
             val tStr = times.getString(i)
@@ -358,10 +500,10 @@ suspend fun fetchOpenMeteoWeather(lat: Double, lon: Double, cityName: String): W
             if (date != null) {
                 val cal = Calendar.getInstance().apply { time = date }
                 if (cal.get(Calendar.HOUR_OF_DAY) >= currentHourInt && cal.get(Calendar.DAY_OF_YEAR) == nowCal.get(Calendar.DAY_OF_YEAR)) {
-                    val label = outFormat.format(date).uppercase(Locale.US)
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
                     val t = temps.getDouble(i).toFloat()
                     val c = codes.getInt(i)
-                    hourlyResult.add(HourlyWeather(timeLabel = label, tempC = t, weatherCode = c))
+                    hourlyResult.add(HourlyWeather(hourOfDay = hour, tempC = t, weatherCode = c))
                     if (hourlyResult.size == 4) break
                 }
             }
@@ -372,11 +514,12 @@ suspend fun fetchOpenMeteoWeather(lat: Double, lon: Double, cityName: String): W
             val tStr = times.getString(fallbackIdx)
             val date = inFormat.parse(tStr)
             if (date != null) {
-                val label = outFormat.format(date).uppercase(Locale.US)
+                val cal = Calendar.getInstance().apply { time = date }
+                val hour = cal.get(Calendar.HOUR_OF_DAY)
                 val t = temps.getDouble(fallbackIdx).toFloat()
                 val c = codes.getInt(fallbackIdx)
-                if (hourlyResult.none { it.timeLabel == label }) {
-                    hourlyResult.add(HourlyWeather(timeLabel = label, tempC = t, weatherCode = c))
+                if (hourlyResult.none { it.hourOfDay == hour }) {
+                    hourlyResult.add(HourlyWeather(hourOfDay = hour, tempC = t, weatherCode = c))
                 }
             }
             fallbackIdx++
@@ -1735,6 +1878,8 @@ fun ClockSettingsDialog(
     onFahrenheitChange: (Boolean) -> Unit,
     burnInProtectionEnabled: Boolean,
     onBurnInProtectionChange: (Boolean) -> Unit,
+    flipScreen180: Boolean,
+    onFlipScreen180Change: (Boolean) -> Unit,
     onOpenTutorial: () -> Unit,
     updateInfo: AppUpdateInfo?,
     isCheckingUpdate: Boolean,
@@ -1819,6 +1964,64 @@ fun ClockSettingsDialog(
                                 text = label,
                                 fontSize = 16.sp,
                                 color = if (layoutMode == mode) Color.White else Color.Gray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
+
+                    val context = LocalContext.current
+                    var currentLang by remember { mutableStateOf(getCurrentLanguageTag(context)) }
+
+                    Text(
+                        text = stringResource(R.string.pref_language_title),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
+                    )
+
+                    val languageOptions = listOf(
+                        "system" to stringResource(R.string.lang_follow_system),
+                        "zh-TW" to stringResource(R.string.lang_zh_tw),
+                        "zh-CN" to stringResource(R.string.lang_zh_cn),
+                        "ja" to stringResource(R.string.lang_ja),
+                        "en" to stringResource(R.string.lang_en)
+                    )
+
+                    languageOptions.forEach { (code, label) ->
+                        val isSelected = when (code) {
+                            "system" -> currentLang == "system"
+                            "zh-TW" -> currentLang.startsWith("zh-TW") || currentLang.startsWith("zh-Hant")
+                            "zh-CN" -> currentLang.startsWith("zh-CN") || currentLang.startsWith("zh-Hans")
+                            "ja" -> currentLang.startsWith("ja")
+                            "en" -> currentLang.startsWith("en")
+                            else -> false
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentLang = code
+                                    setAppLanguage(context, code)
+                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    currentLang = code
+                                    setAppLanguage(context, code)
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = label,
+                                fontSize = 16.sp,
+                                color = if (isSelected) Color.White else Color.Gray
                             )
                         }
                     }
@@ -2093,6 +2296,35 @@ fun ClockSettingsDialog(
                         )
                     }
 
+                    // 畫面 180° 反轉開關（針對 Moto 等外螢幕倒置設備）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onFlipScreen180Change(!flipScreen180) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.pref_flip_180_title),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = stringResource(R.string.pref_flip_180_desc),
+                                fontSize = 13.sp,
+                                color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = flipScreen180,
+                            onCheckedChange = null
+                        )
+                    }
+
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
 
                     // 7. 螢幕亮度手動控制
@@ -2234,7 +2466,6 @@ fun ClockSettingsDialog(
 
                     // 10. 軟體版本與更新專區
                     val uriHandler = LocalUriHandler.current
-                    val context = LocalContext.current
                     val pInfo = remember(context) {
                         try {
                             context.packageManager.getPackageInfo(context.packageName, 0)
@@ -2438,7 +2669,6 @@ fun InitialScreen(
 ) {
     val context = LocalContext.current
 
-    // 動態抓取 versionName（如 "1.0.1"）
     val versionName = remember(context) {
         try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.1"
@@ -2663,7 +2893,6 @@ fun InitialScreen(
                 }
             }
 
-            // 👉 橫向與直向共用的右下角版本號（如 v1.0.1）
             Text(
                 text = "v$versionName",
                 fontSize = 11.sp,
@@ -2708,6 +2937,10 @@ fun DeskClockScreen(
 
     val prefs = remember { context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE) }
 
+    var flipScreen180 by remember {
+        mutableStateOf(prefs.getBoolean("pref_flip_screen_180", false))
+    }
+
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
 
@@ -2716,6 +2949,42 @@ fun DeskClockScreen(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
         } catch (e: Exception) {
             "1.0.0"
+        }
+    }
+
+    LaunchedEffect(flipScreen180) {
+        val currentActivity = activity ?: return@LaunchedEffect
+
+        if (flipScreen180) {
+            // 開啟反轉：獲取當前物理旋轉角度並轉向對立面，強制鎖定禁止自動旋轉
+            val displayRotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                currentActivity.display?.rotation ?: android.view.Surface.ROTATION_270
+            } else {
+                @Suppress("DEPRECATION")
+                currentActivity.windowManager.defaultDisplay.rotation
+            }
+
+            currentActivity.requestedOrientation = when (displayRotation) {
+                android.view.Surface.ROTATION_90 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                android.view.Surface.ROTATION_270 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+        } else {
+            // 關閉反轉：恢復各機型的預設轉向邏輯 (直接在此判定品牌與長寬比，不依賴 MainActivity 私有變數)
+            val m = Build.MANUFACTURER.lowercase()
+            val b = Build.BRAND.lowercase()
+            val isMoto = m.contains("motorola") || m.contains("lenovo") || b.contains("motorola") || b.contains("moto")
+
+            val metrics = currentActivity.resources.displayMetrics
+            val maxDim = maxOf(metrics.widthPixels, metrics.heightPixels).toFloat()
+            val minDim = minOf(metrics.widthPixels, metrics.heightPixels).toFloat()
+            val isTall = (maxDim / minDim) >= 2.05f
+
+            currentActivity.requestedOrientation = if (isMoto || isTall) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+            }
         }
     }
 
@@ -2790,7 +3059,8 @@ fun DeskClockScreen(
             .putBoolean("pref_weather_enabled", weatherEnabled)
             .putBoolean("pref_is_fahrenheit", isFahrenheit)
             .putBoolean("pref_burn_in_enabled", burnInProtectionEnabled)
-            .putBoolean("pref_show_calendar_events", showCalendarEvents) // <-- 補上這行
+            .putBoolean("pref_show_calendar_events", showCalendarEvents)
+            .putBoolean("pref_flip_screen_180", flipScreen180)
             .apply()
     }
 
@@ -2840,38 +3110,11 @@ fun DeskClockScreen(
                 val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-                // 當擁有權限、在雙區塊模式、功能已開啟但目前還沒有抓到天氣時立即觸發
+                // 當擁有權限、在雙區塊模式且功能已開啟但目前無資料時觸發刷新
                 if ((hasFine || hasCoarse) && weatherEnabled && layoutMode != ClockLayoutMode.SINGLE && weatherInfo == null) {
                     CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-                            val location = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                                ?: locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-
-                            val lat = location?.latitude ?: 24.838
-                            val lon = location?.longitude ?: 121.017
-
-                            var detectedCity = defaultCityStr
-                            try {
-                                val geocoder = Geocoder(context, Locale.getDefault())
-                                val addresses = geocoder.getFromLocation(lat, lon, 1)
-                                if (!addresses.isNullOrEmpty()) {
-                                    val addr = addresses[0]
-                                    detectedCity = addr.locality
-                                        ?: addr.subAdminArea
-                                                ?: addr.adminArea
-                                                ?: currentLocationStr
-                                }
-                            } catch (e: Exception) {
-                                // 保持預設
-                            }
-
-                            val data = fetchOpenMeteoWeather(lat, lon, detectedCity)
-                            withContext(Dispatchers.Main) {
-                                weatherInfo = data
-                            }
-                        } catch (e: Exception) {
-                            Log.e("DeskClockWeather", "OnResume fetch error", e)
+                        fetchAndApplyWeather(context, currentLocationStr) { data ->
+                            weatherInfo = data
                         }
                     }
                 }
@@ -2893,37 +3136,8 @@ fun DeskClockScreen(
 
             if (hasFine || hasCoarse) {
                 while (true) {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-                            val location: Location? = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                                ?: locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-
-                            val lat = location?.latitude ?: 24.838
-                            val lon = location?.longitude ?: 121.017
-
-                            var detectedCity = defaultCityStr
-                            try {
-                                val geocoder = Geocoder(context, Locale.getDefault())
-                                val addresses = geocoder.getFromLocation(lat, lon, 1)
-                                if (!addresses.isNullOrEmpty()) {
-                                    val addr = addresses[0]
-                                    detectedCity = addr.locality
-                                        ?: addr.subAdminArea
-                                        ?: addr.adminArea
-                                        ?: currentLocationStr
-                                }
-                            } catch (e: Exception) {
-                                // 保持預設
-                            }
-
-                            val data = fetchOpenMeteoWeather(lat, lon, detectedCity)
-                            withContext(Dispatchers.Main) {
-                                weatherInfo = data
-                            }
-                        } catch (e: Exception) {
-                            Log.e("DeskClockWeather", "Location error", e)
-                        }
+                    fetchAndApplyWeather(context, currentLocationStr) { data ->
+                        weatherInfo = data
                     }
                     delay(30 * 60 * 1000L)
                 }
@@ -3090,6 +3304,7 @@ fun DeskClockScreen(
                             weatherEnabled = weatherEnabled,
                             weatherInfo = weatherInfo,
                             isFahrenheit = isFahrenheit,
+                            is24Hour = is24Hour,
                             isUiLocked = isUiLocked,
                             calendarEvents = calendarEventsList,
                             modifier = Modifier.fillMaxSize()
@@ -3214,6 +3429,8 @@ fun DeskClockScreen(
                 showHingeAngle = showHingeAngle,
                 onShowHingeAngleChange = { showHingeAngle = it },
                 hasHingeSensor = hasHingeSensor,
+                flipScreen180 = flipScreen180,
+                onFlipScreen180Change = { flipScreen180 = it },
                 manualBrightness = manualBrightness,
                 onManualBrightnessChange = { manualBrightness = it },
                 brightnessValue = brightnessValue,
@@ -3389,6 +3606,7 @@ fun SideWidgetPager(
     weatherEnabled: Boolean,
     weatherInfo: WeatherInfo?,
     isFahrenheit: Boolean,
+    is24Hour: Boolean = false,
     isUiLocked: Boolean,
     calendarEvents: List<UpcomingCalendarEvent>,
     modifier: Modifier = Modifier
@@ -3403,7 +3621,8 @@ fun SideWidgetPager(
             1 -> SideWeatherWidget(
                 weatherEnabled = weatherEnabled,
                 weatherInfo = weatherInfo,
-                isFahrenheit = isFahrenheit
+                isFahrenheit = isFahrenheit,
+                is24Hour = is24Hour
             )
         }
     }
@@ -3464,18 +3683,18 @@ fun SideDateWidget(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 👉 核心縮放係數：以摺疊機標準高度 360dp 為基準，在大平板上自動等比放大 (最高放大至 1.85 倍)
         val containerWidth = maxWidth
         val scale = (maxHeight / 360.dp).coerceIn(1.0f, 1.85f)
         val horizontalPad = (18.dp * scale).coerceAtMost(36.dp)
 
         val maxEventsToShow = when {
-            maxHeight < 260.dp -> 1
-            maxHeight < 355.dp -> 2
+            maxHeight < 280.dp -> 1
+            maxHeight < 360.dp -> 2
             else -> 3
         }
         val visibleEvents = calendarEvents.take(maxEventsToShow)
         val eventCount = visibleEvents.size
+        val hasEvents = visibleEvents.isNotEmpty()
 
         Column(
             modifier = Modifier
@@ -3483,62 +3702,85 @@ fun SideDateWidget(
                 .padding(
                     horizontal = horizontalPad,
                     vertical = when {
-                        eventCount >= 3 -> 8.dp * scale
-                        eventCount == 2 -> 10.dp * scale
+                        hasEvents -> 10.dp * scale
                         else -> 14.dp * scale
                     }
                 ),
-            // 若在大平板上，避免兩端扯太開，內容自然均勻分布
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 1. 頂部星期與大日期
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val headerFontSize = ((if (eventCount >= 3) 25f else 27f) * scale).sp
+            // =========================================================
+            // 1. 頂部日期區塊（依據是否有行程自動切換單行 / 雙行排版）
+            // =========================================================
+            if (hasEvents) {
+                // 👉 有行程：收納成一行 "Sun Nov 8"，字體等大，騰出空間給下方的行程卡片
+                val singleLineFontSize = (22f * scale).sp
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 4.dp * scale)
+                ) {
                     Text(
                         text = dayOfWeekStr,
                         color = colorThu,
-                        fontSize = headerFontSize,
+                        fontSize = singleLineFontSize,
                         fontWeight = FontWeight.Bold,
-                        style = TextStyle(
-                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                        )
+                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
                     )
-                    Spacer(modifier = Modifier.width(8.dp * scale))
+                    Spacer(modifier = Modifier.width(6.dp * scale))
                     Text(
                         text = monthShortStr,
                         color = Color.White,
-                        fontSize = headerFontSize,
+                        fontSize = singleLineFontSize,
                         fontWeight = FontWeight.Bold,
-                        style = TextStyle(
-                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                        )
+                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                    )
+                    Spacer(modifier = Modifier.width(6.dp * scale))
+                    Text(
+                        text = dayOfMonthStr,
+                        color = Color.White,
+                        fontSize = singleLineFontSize,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
                     )
                 }
+            } else {
+                // 👉 無行程：維持原有的雙行制大日期排版
+                Column {
+                    val headerFontSize = (27f * scale).sp
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = dayOfWeekStr,
+                            color = colorThu,
+                            fontSize = headerFontSize,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp * scale))
+                        Text(
+                            text = monthShortStr,
+                            color = Color.White,
+                            fontSize = headerFontSize,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                        )
+                    }
 
-                val baseDigitSize = when {
-                    visibleEvents.isEmpty() -> 72f
-                    eventCount >= 3 -> 48f
-                    eventCount == 2 -> 54f
-                    else -> 64f
+                    val digitSize = (72f * scale).sp
+                    Text(
+                        text = dayOfMonthStr,
+                        color = Color.White,
+                        fontSize = digitSize,
+                        lineHeight = digitSize,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
+                        modifier = Modifier.padding(top = 2.dp * scale)
+                    )
                 }
-                val digitSize = (baseDigitSize * scale).sp
-
-                Text(
-                    text = dayOfMonthStr,
-                    color = Color.White,
-                    fontSize = digitSize,
-                    lineHeight = digitSize,
-                    fontWeight = FontWeight.Bold,
-                    style = TextStyle(
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                    ),
-                    modifier = Modifier.padding(top = 2.dp * scale)
-                )
             }
 
+            // =========================================================
             // 2. 中間近期行程卡片
-            if (visibleEvents.isNotEmpty()) {
+            // =========================================================
+            if (hasEvents) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3570,9 +3812,7 @@ fun SideDateWidget(
                                     color = colorThu,
                                     fontSize = (9.5f * scale).sp,
                                     fontWeight = FontWeight.Bold,
-                                    style = TextStyle(
-                                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                    )
+                                    style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
                                 )
                             }
 
@@ -3584,16 +3824,16 @@ fun SideDateWidget(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth(),
-                                style = TextStyle(
-                                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                )
+                                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
                             )
                         }
                     }
                 }
             }
 
-            // 3. 底部月曆網格 (依寬度與高度動態計算格子大小，不再寫死 16.dp)
+            // =========================================================
+            // 3. 底部月曆網格
+            // =========================================================
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = monthFullStr,
@@ -3604,7 +3844,6 @@ fun SideDateWidget(
                     modifier = Modifier.padding(bottom = 3.dp * scale)
                 )
 
-                // 動態計算月曆單格大小：寬度均分，最大可達 32.dp（手機上維持原本約 16.dp）
                 val availableWidth = containerWidth - (horizontalPad * 2)
                 val cellSize = (availableWidth / 7.6f).coerceIn(16.dp, 32.dp)
                 val cellFontSize = (cellSize.value * 0.52f).sp
@@ -3659,9 +3898,7 @@ fun SideDateWidget(
                                         fontSize = cellFontSize,
                                         fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
                                         textAlign = TextAlign.Center,
-                                        style = TextStyle(
-                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                        )
+                                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
                                     )
                                 }
                             } else {
@@ -3680,6 +3917,7 @@ fun SideWeatherWidget(
     weatherEnabled: Boolean,
     weatherInfo: WeatherInfo?,
     isFahrenheit: Boolean,
+    is24Hour: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -3801,8 +4039,19 @@ fun SideWeatherWidget(
                                 modifier = Modifier.size(26.dp)
                             )
 
+                            val timeLabel = remember(hourly.hourOfDay, is24Hour) {
+                                if (is24Hour) {
+                                    String.format(Locale.getDefault(), "%02d:00", hourly.hourOfDay)
+                                } else {
+                                    val h = hourly.hourOfDay
+                                    val amPm = if (h < 12) "AM" else "PM"
+                                    val displayH = if (h == 0) 12 else if (h > 12) h - 12 else h
+                                    "$displayH$amPm"
+                                }
+                            }
+
                             Text(
-                                text = hourly.timeLabel,
+                                text = timeLabel,
                                 color = Color(0xFFA0A0AA),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium
@@ -3941,14 +4190,25 @@ fun DigitalClockFace(
     }
 
     val dateString = remember(currentTime) {
-        SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date(currentTime))
+        val locale = Locale.getDefault()
+        val isCjk = locale.language in listOf("zh", "ja")
+        if (isCjk) {
+            val weekStr = SimpleDateFormat("EEEE", locale).format(Date(currentTime))
+            val dateStr = SimpleDateFormat("M月d日", locale).format(Date(currentTime))
+            "$weekStr, $dateStr"
+        } else {
+            SimpleDateFormat("EEEE, MMMM d", locale).format(Date(currentTime))
+        }
     }
+
+    // 顯示秒數時稍微縮減水平邊距，給予字串更多排版寬度
+    val horizontalPad = if (showSeconds) 32.dp else 40.dp
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(horizontal = 24.dp, vertical = 20.dp)
+            .padding(horizontal = horizontalPad, vertical = 20.dp)
             .pointerInput(availableStyles, isUiLocked) {
                 awaitPointerEventScope {
                     var lastSingleTapTime = 0L
@@ -4008,14 +4268,17 @@ fun DigitalClockFace(
     ) {
         val heightBasedSize = maxHeight * 0.70f
 
+        // 縮放係數微調：使字元等比收窄至安全區
         val widthDivider = when {
-            showSeconds && is24Hour -> 5.5f
-            showSeconds && !is24Hour -> 6.8f
-            !showSeconds && is24Hour -> 3.5f
-            else -> 4.5f
+            showSeconds && is24Hour -> 6.45f
+            showSeconds && !is24Hour -> 7.50f
+            !showSeconds && is24Hour -> 4.25f
+            else -> 4.95f
         }
 
-        val calculatedHeight = (maxWidth - 48.dp) / widthDivider
+        // 預留額外 16.dp 安全緩衝，確保左右兩端不貼邊
+        val availableWidth = (maxWidth - 16.dp).coerceAtLeast(0.dp)
+        val calculatedHeight = availableWidth / widthDivider
         val finalDigitHeight = min(heightBasedSize, calculatedHeight)
 
         val animatedDigitHeight by animateDpAsState(
@@ -4158,7 +4421,15 @@ fun AnalogClockFace(
     val minutes = calendar.get(Calendar.MINUTE)
     val seconds = calendar.get(Calendar.SECOND)
     val dateString = remember(currentTime) {
-        SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(currentTime)).uppercase()
+        val locale = Locale.getDefault()
+        val isCjk = locale.language in listOf("zh", "ja")
+        if (isCjk) {
+            val weekStr = SimpleDateFormat("EEEE", locale).format(Date(currentTime))
+            val dateStr = SimpleDateFormat("M月d日", locale).format(Date(currentTime))
+            "$weekStr, $dateStr"
+        } else {
+            SimpleDateFormat("EEEE, MMMM d", locale).format(Date(currentTime))
+        }
     }
 
     val currentBgColor = when (analogStyleIndex) {
@@ -4919,14 +5190,22 @@ fun FlipClockFace(
         cal.get(Calendar.AM_PM) == Calendar.AM
     }
     val dateString = remember(currentTime) {
-        SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date(currentTime))
+        val locale = Locale.getDefault()
+        val isCjk = locale.language in listOf("zh", "ja")
+        if (isCjk) {
+            val weekStr = SimpleDateFormat("EEEE", locale).format(Date(currentTime))
+            val dateStr = SimpleDateFormat("M月d日", locale).format(Date(currentTime))
+            "$weekStr, $dateStr"
+        } else {
+            SimpleDateFormat("EEEE, MMMM d", locale).format(Date(currentTime))
+        }
     }
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .padding(horizontal = 36.dp, vertical = 14.dp)
             .pointerInput(availableStyles, isUiLocked) {
                 awaitPointerEventScope {
                     var lastSingleTapTime = 0L
@@ -4984,16 +5263,16 @@ fun FlipClockFace(
                 }
             }
     ) {
-        val targetWidth = maxWidth * 0.85f
+        val targetWidth = maxWidth * 0.78f
 
         val widthDivider = if (showSeconds) {
-            if (is24Hour) 5.15f else 5.65f
+            if (is24Hour) 5.25f else 5.75f
         } else {
-            if (is24Hour) 3.30f else 3.80f
+            if (is24Hour) 3.35f else 3.85f
         }
 
         val calculatedCardHeight = targetWidth / widthDivider
-        val finalCardHeight = min(calculatedCardHeight, maxHeight * 0.85f)
+        val finalCardHeight = min(calculatedCardHeight, maxHeight * 0.82f)
 
         val animatedCardHeight by animateDpAsState(
             targetValue = finalCardHeight,
@@ -5108,6 +5387,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Build.MANUFACTURER.lowercase().contains("honor")
     }
 
+    private val isMotorolaDevice: Boolean by lazy {
+        val m = Build.MANUFACTURER.lowercase()
+        val b = Build.BRAND.lowercase()
+        m.contains("motorola") || m.contains("lenovo") || b.contains("motorola") || b.contains("moto")
+    }
+
     /**
      * 判定是否為「開啟了三大虛擬導航按鍵」的三星裝置
      * 用於精準分流導覽列重置排程，避免全螢幕手勢機型產生黑塊過渡
@@ -5195,6 +5480,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val savedLang = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+            .getString("pref_app_language", "system") ?: "system"
+        if (savedLang != "system") {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(savedLang))
+        }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
@@ -5258,7 +5548,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 } else {
                     InitialScreen(
                         hasHingeSensor = hasHingeSensor,
-                        isClamshell = isClamshell || (hasHingeSensor && isTallAspectRatio() && lastRecordedHingeAngle >= 160f),
+                        isClamshell = isClamshell || (hasHingeSensor && isTallAspectRatio()),
                         onEnterClockDirectly = {
                             isNonFoldableBypassed = true
                             showClockScreen = true
@@ -5376,7 +5666,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             if (currentAngle in 30f..120f) {
                 if (!showClockScreen) {
                     showClockScreen = true
-                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+
+                    val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+                    val isFlipped = prefs.getBoolean("pref_flip_screen_180", false)
+
+                    requestedOrientation = if (isFlipped) {
+                        // 若先前有開啟反轉，直接強制鎖定在 90° 橫向
+                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    } else if (isMotorolaDevice || isClamshell || isTallAspectRatio()) {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                    }
 
                     val needsStateOverride = !isTallAspectRatio() || !isRearDisplayActive
                     if (needsStateOverride) {
