@@ -9,6 +9,7 @@ readonly SERIAL='emulator-5554'
 readonly AVD_NAME='Linzin_CircleCI_API35_GoogleApis'
 readonly SYSTEM_IMAGE='system-images;android-35;google_apis;x86_64'
 readonly PACKAGE='com.linzin.linzindeskclock'
+readonly PYTHON='/usr/bin/python3' # Avoid the machine image's pyenv shim after SDK environment changes.
 readonly ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly EVIDENCE="$ROOT/.local/circleci"
 readonly TOOLS="$ROOT/.local/circleci-tools"
@@ -28,6 +29,7 @@ git diff --quiet && git diff --cached --quiet || fail 'Tracked checkout is dirty
 # The baseline is informational, not a hardcoded build revision: the new config
 # must first be committed. Bind every output to the requested, checked-out SHA.
 [[ -n ${BASH_ENV:-} ]] || fail 'CircleCI BASH_ENV required.'
+[[ -x "$PYTHON" ]] || fail 'System Python 3 is required.'
 
 fetch() {
   curl --fail --location --silent --show-error --retry 3 --connect-timeout 30 \
@@ -60,7 +62,7 @@ prepare() {
   # ANDROID_USER_HOME provides a fresh debug keystore. Never upload this folder.
   readonly metadata_url='https://api.adoptium.net/v3/assets/release_name/eclipse/jdk-25.0.5%2B8?architecture=x64&heap_size=normal&image_type=jdk&jvm_impl=hotspot&os=linux&project=jdk'
   fetch "$metadata_url" "$EVIDENCE/evidence/adoptium-metadata.json"
-  python3 -I -B "$VERIFY" jdk --root "$ROOT" > "$TOOLS/downloads/jdk-selection.txt"
+  "$PYTHON" -I -B "$VERIFY" jdk --root "$ROOT" > "$TOOLS/downloads/jdk-selection.txt"
   mapfile -t jdk < "$TOOLS/downloads/jdk-selection.txt"
   [[ ${#jdk[@]} == 2 ]] || fail 'Invalid JDK metadata selection.'
   fetch "${jdk[0]}" "$TOOLS/downloads/jdk.tar.gz"
@@ -111,7 +113,7 @@ prepare() {
   printf '%s\n' "$LINZIN_EXPECTED_SHA" > "$EVIDENCE/evidence/commit.txt"
   printf '%s\n' "$BASELINE" > "$EVIDENCE/evidence/preparation-baseline.txt"
   free -m > "$EVIDENCE/logs/memory-before-build.txt"
-  python3 -I -B "$VERIFY" --self-test
+  "$PYTHON" -I -B "$VERIFY" --self-test
 }
 
 gradle() {
@@ -130,7 +132,7 @@ build() {
   gradle --version 2>&1 | tee "$EVIDENCE/logs/gradle-version.txt"
   gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleDebugAndroidTest \
     --rerun-tasks --continue 2>&1 | tee "$EVIDENCE/logs/build.txt"
-  python3 -I -B "$VERIFY" build --root "$ROOT"
+  "$PYTHON" -I -B "$VERIFY" build --root "$ROOT"
   # No Gradle workload overlaps the emulator. --no-daemon terminates its JVM.
 }
 
@@ -176,7 +178,7 @@ cleanup_emulator() {
 }
 
 emulator_tests() {
-  python3 -I -B "$VERIFY" build --root "$ROOT"
+  "$PYTHON" -I -B "$VERIFY" build --root "$ROOT"
   [[ ! -e "$EVIDENCE/evidence/instrumentation-result.json" ]] || fail 'Do not rerun against stale emulator evidence.'
   [[ -r /dev/kvm && -w /dev/kvm ]] || fail 'Machine image must provide writable KVM.'
   readonly ADB="$ANDROID_HOME/platform-tools/adb"
@@ -238,10 +240,10 @@ emulator_tests() {
     -e linzinDedicatedMediaEmulator true \
     "$PACKAGE.test/androidx.test.runner.AndroidJUnitRunner" \
     2>&1 | tee "$EVIDENCE/logs/instrumentation.txt"
-  python3 -I -B "$VERIFY" instrumentation --root "$ROOT"
+  "$PYTHON" -I -B "$VERIFY" instrumentation --root "$ROOT"
   identity || fail 'Identity changed before background verification.'
   # The existing verifier independently guards emulator hardware and serial.
-  timeout 300 python3 -I -B scripts/verify-background-clock.py --adb "$ADB" --serial "$SERIAL" \
+  timeout 300 "$PYTHON" -I -B scripts/verify-background-clock.py --adb "$ADB" --serial "$SERIAL" \
     --port 5037 --output "$EVIDENCE/background-clock" 2>&1 | tee "$EVIDENCE/logs/background-clock.txt"
   printf 'Instrumentation and background-clock commands completed.\n'
 }
@@ -249,7 +251,7 @@ emulator_tests() {
 package_artifacts() {
   "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs \
     app/build/outputs/apk/debug/app-debug.apk > "$EVIDENCE/evidence/debug-apk-certificate.txt"
-  python3 -I -B "$VERIFY" package --root "$ROOT"
+  "$PYTHON" -I -B "$VERIFY" package --root "$ROOT"
   printf 'CIRCLECI_VALIDATION_PASSED: 156 JVM tests, lint, 83 instrumentation tests and background clock.\n'
 }
 
