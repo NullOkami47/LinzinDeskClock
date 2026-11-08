@@ -183,6 +183,15 @@ $otherClients = @(Get-CimInstance Win32_Process -Filter "Name='adb.exe'" | Where
     $_.ProcessId -ne $run.AdbProcessId -and $_.CommandLine -match 'emulator-5580|\b5038\b'
 })
 if ($otherClients.Count -gt 0) { throw 'Another dedicated-emulator adb command is active; refusing to race.' }
+# This disposable AVD may contain a local build signed with a different debug key.
+# Start from a clean installation of these two fixed test packages only. Never run this on USB.
+foreach ($package in @('com.linzin.linzindeskclock.test', 'com.linzin.linzindeskclock')) {
+    $existing = Invoke-DedicatedAdb -Arguments @('shell', 'pm', 'list', 'packages', '--user', '0', $package)
+    if (($existing -split "\r?\n") -contains "package:$package") {
+        $removed = Invoke-DedicatedAdb -Arguments @('uninstall', $package) -TimeoutSeconds 60
+        if ($removed -notmatch '(?m)^Success\s*$') { throw "Could not remove dedicated emulator fixture $package." }
+    }
+}
 $notificationsBefore = Invoke-DedicatedAdb -Arguments @('shell', 'settings', '--user', '0', 'get', 'secure', 'enabled_notification_listeners')
 $notificationsBefore | Set-Content -LiteralPath (Join-Path $reportRoot 'notification-listeners-before.txt')
 $burnInRoot = '/sdcard/Android/data/com.linzin.linzindeskclock/cache/burn-in-verification'
