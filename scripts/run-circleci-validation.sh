@@ -127,12 +127,30 @@ gradle() {
     -Pkotlin.compiler.execution.strategy=in-process
 }
 
+run_logged() {
+  local log=$1
+  shift
+  # Follow the supervised command PID rather than EOF on a pipe inherited by JVM children.
+  # The actual command's exit status remains the gate; BUILD SUCCESSFUL text is not enough.
+  : > "$log"
+  "$@" > "$log" 2>&1 &
+  local command_pid=$!
+  tail --pid="$command_pid" --sleep-interval=1 -n +1 -F "$log" &
+  local tail_pid=$!
+  local status=0
+  wait "$command_pid" || status=$?
+  wait "$tail_pid" || true
+  printf 'CI_COMMAND_FINISHED: exit=%s log=%s\n' "$status" "$log"
+  ps -eo pid,ppid,etimes,comm > "$EVIDENCE/logs/processes-after-command.txt"
+  return "$status"
+}
 build() {
   [[ -f "$EVIDENCE/evidence/commit.txt" && ! -e "$EVIDENCE/evidence/build-result.json" ]] || fail 'Fresh prepare phase required.'
-  gradle --version 2>&1 | tee "$EVIDENCE/logs/gradle-version.txt"
-  gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleDebugAndroidTest \
-    --rerun-tasks --continue 2>&1 | tee "$EVIDENCE/logs/build.txt"
-  "$PYTHON" -I -B "$VERIFY" build --root "$ROOT"
+  run_logged "$EVIDENCE/logs/gradle-version.txt" gradle --version
+  run_logged "$EVIDENCE/logs/build.txt" gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleDebugAndroidTest \
+    --rerun-tasks --continue
+  printf 'CI_VALIDATING_BUILD_REPORTS\n'
+  timeout 120 "$PYTHON" -I -B "$VERIFY" build --root "$ROOT"
   # No Gradle workload overlaps the emulator. --no-daemon terminates its JVM.
 }
 
@@ -178,7 +196,8 @@ cleanup_emulator() {
 }
 
 emulator_tests() {
-  "$PYTHON" -I -B "$VERIFY" build --root "$ROOT"
+  printf 'CI_VALIDATING_BUILD_REPORTS\n'
+  timeout 120 "$PYTHON" -I -B "$VERIFY" build --root "$ROOT"
   [[ ! -e "$EVIDENCE/evidence/instrumentation-result.json" ]] || fail 'Do not rerun against stale emulator evidence.'
   [[ -r /dev/kvm && -w /dev/kvm ]] || fail 'Machine image must provide writable KVM.'
   readonly ADB="$ANDROID_HOME/platform-tools/adb"
