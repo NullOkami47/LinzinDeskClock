@@ -205,7 +205,7 @@ emulator_tests() {
   "$EMULATOR" -version > "$EVIDENCE/logs/emulator-version.txt" 2>&1
   "$EMULATOR" -accel-check 2>&1 | tee "$EVIDENCE/logs/kvm.txt"
   # Reject any pre-existing transport; the cloud instance must be disposable.
-  "$ADB" -H 127.0.0.1 -P 5037 start-server
+  "$ADB" -P 5037 start-server # -H requires a server that already exists, even on loopback.
   "$ADB" -H 127.0.0.1 -P 5037 devices > "$EVIDENCE/logs/devices-before.txt"
   [[ -z "$(sed '1d; /^[[:space:]]*$/d' "$EVIDENCE/logs/devices-before.txt")" ]] || fail 'Unexpected existing device or emulator.'
   printf 'no\n' | "$AVDMANAGER" create avd --name "$AVD_NAME" --package "$SYSTEM_IMAGE" \
