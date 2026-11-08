@@ -102,6 +102,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -1712,7 +1713,7 @@ fun InitialScreen(
         ) {
             val isLandscape = maxWidth > maxHeight
             androidx.compose.material3.TextButton(
-                onClick={ showAutoSetup=true },modifier=Modifier.align(Alignment.TopEnd)
+                onClick={ showAutoSetup=true },modifier=Modifier.align(Alignment.TopEnd).zIndex(1f)
             ) { Text(stringResource(R.string.auto_setup)) }
 
             if (isLandscape) {

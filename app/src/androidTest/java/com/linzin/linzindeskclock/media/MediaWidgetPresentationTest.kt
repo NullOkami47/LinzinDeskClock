@@ -143,6 +143,8 @@ class MediaWidgetPresentationTest {
         val locked = mutableStateOf(false)
         show(MediaWidgetState(MediaAccess.NOT_GRANTED), locked = locked, hideWhenLocked = true)
         compose.runOnIdle { locked.value = true }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
         compose.onNodeWithTag("media_permission_button").assertDoesNotExist()
         compose.onNodeWithText("請先解鎖裝置，再開啟通知存取權。").assertIsDisplayed()
         compose.runOnIdle { assertEquals("Locking must not launch settings", 0, settingsClicks) }
@@ -239,6 +241,7 @@ class MediaWidgetPresentationTest {
         val locked = mutableStateOf(false)
         show(fixture(), locked = locked, hideWhenLocked = true)
         compose.runOnIdle { locked.value = true }
+        compose.waitForIdle()
         compose.onNodeWithTag("media_artwork").assertDoesNotExist()
         compose.onNodeWithTag("media_glass_panel").assertDoesNotExist()
         compose.onNodeWithText("唯有追趕風的方向").assertDoesNotExist()
@@ -283,7 +286,9 @@ class MediaWidgetPresentationTest {
             val sourceContext = LocalContext.current
             val configuration = Configuration(LocalConfiguration.current).apply { setLocale(Locale.TAIWAN) }
             val context = sourceContext.createConfigurationContext(configuration)
-            val density = LocalDensity.current.density
+            // The reference portrait is 560 dp high; fit that fixture into the 720 px
+            // landscape test window at 1 px/dp instead of accidentally clipping it at 2x.
+            val density = minOf(LocalDensity.current.density, 1f)
             pixelsPerDp = density
             CompositionLocalProvider(LocalContext provides context, LocalConfiguration provides configuration,
                 LocalDensity provides Density(density, fontScale)) {
@@ -302,6 +307,7 @@ class MediaWidgetPresentationTest {
         }
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(400)
+        compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         val rect = checkNotNull(captureBounds.get())
         assertEquals("The emulator must fit the requested presentation width", width * pixelsPerDp, rect.width().toFloat(), 1.5f)
@@ -377,6 +383,7 @@ class MediaWidgetPresentationTest {
         val committed = CountDownLatch(1)
         val frameCallback = Runnable { committed.countDown() }
         val decor = compose.activity.window.decorView
+        compose.waitUntil(MEDIA_WAIT_MS) { mediaOnMain { decor.hasWindowFocus() } }
         mediaOnMain {
             assertTrue("A real hardware window is required for glass screenshots", decor.isHardwareAccelerated && decor.hasWindowFocus())
             decor.viewTreeObserver.registerFrameCommitCallback(frameCallback)

@@ -3,6 +3,8 @@ package com.linzin.linzindeskclock
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -13,7 +15,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
@@ -28,7 +30,7 @@ import org.junit.Test
 /** Calls the production screen, including its parent observer, dual branch, pagers and callbacks. */
 class DeskClockScreenSplitIntegrationTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun screenSnapsEachAnchorAndPersistsGeometryAcrossBothDualModeChanges() {
@@ -89,7 +91,7 @@ class DeskClockScreenSplitIntegrationTest {
             MaterialTheme {
                 val slop = LocalViewConfiguration.current.touchSlop
                 SideEffect { touchSlop = slop }
-                CompositionLocalProvider(LocalContext provides context) {
+                CompositionLocalProvider(LocalContext provides context, LocalActivityResultRegistryOwner provides compose.activity) {
                     DeskClockScreen(hasHingeSensor = false, modifier = Modifier.testTag(ROOT))
                 }
             }
