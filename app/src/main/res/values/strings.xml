@@ -101,4 +101,17 @@
     <string name="layout_switch_opt_left">Yes (Left Large)</string>
     <string name="layout_switch_opt_right">Yes (Right Large)</string>
 
+    <!-- Update Check -->
+    <string name="toast_update_available">New version available (%1$s)! Check the bottom of Settings to update.</string>
+    <string name="toast_update_failed">Failed to check for updates. Please check your network connection.</string>
+    <string name="toast_update_latest">Already up to date (%1$s)</string>
+
+    <string name="settings_version_title">Version Info</string>
+    <string name="settings_version_current">Current Version: v%1$s (Build %2$s)</string>
+    <string name="settings_btn_check_update">Check for Updates</string>
+    <string name="settings_btn_checking_update">Checking...</string>
+    <string name="settings_update_available_title">New version available: %1$s</string>
+    <string name="settings_update_available_desc">A new release is available on GitHub. It is recommended to update now.</string>
+    <string name="settings_btn_go_to_github_releases">Download from GitHub Releases</string>
+
 </resources>

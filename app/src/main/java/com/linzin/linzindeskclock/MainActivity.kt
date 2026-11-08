@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -121,6 +122,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -395,6 +397,68 @@ suspend fun fetchOpenMeteoWeather(lat: Double, lon: Double, cityName: String): W
 fun formatTemp(celsius: Float, isFahrenheit: Boolean): String {
     val temp = if (isFahrenheit) (celsius * 9f / 5f + 32f).roundToInt() else celsius.roundToInt()
     return "$temp°"
+}
+
+data class AppUpdateInfo(
+    val hasUpdate: Boolean,
+    val latestVersion: String,
+    val releaseUrl: String = "https://github.com/linzin86/LinzinDeskClock/releases"
+)
+
+/**
+ * 比較兩組版本號字串 (如 1.0.1 vs 1.0.0)
+ */
+fun isVersionNewer(latest: String, current: String): Boolean {
+    val lParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+    val cParts = current.split(".").mapNotNull { it.toIntOrNull() }
+    val maxLen = maxOf(lParts.size, cParts.size)
+    for (i in 0 until maxLen) {
+        val l = lParts.getOrElse(i) { 0 }
+        val c = cParts.getOrElse(i) { 0 }
+        if (l > c) return true
+        if (l < c) return false
+    }
+    return false
+}
+
+/**
+ * 查詢 GitHub 最新 Release 版本資訊
+ */
+suspend fun checkForAppUpdate(currentVersionName: String): AppUpdateInfo? = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("https://api.github.com/repos/linzin86/LinzinDeskClock/releases/latest")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 6000
+            readTimeout = 6000
+            // GitHub API 規定必須提供 User-Agent，否則會回傳 403 拒絕請求
+            setRequestProperty("User-Agent", "LinzinDeskClock-Android")
+            setRequestProperty("Accept", "application/vnd.github.v3+json")
+        }
+
+        if (conn.responseCode == 200) {
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+            val root = JSONObject(responseText)
+            val tagName = root.optString("tag_name", "")
+            val htmlUrl = root.optString("html_url", "https://github.com/linzin86/LinzinDeskClock/releases")
+
+            val cleanLatest = tagName.trim().removePrefix("v").removePrefix("V")
+            val cleanCurrent = currentVersionName.trim().removePrefix("v").removePrefix("V")
+
+            val isNewer = isVersionNewer(cleanLatest, cleanCurrent)
+
+            AppUpdateInfo(
+                hasUpdate = isNewer,
+                latestVersion = tagName,
+                releaseUrl = if (htmlUrl.isNotBlank()) htmlUrl else "https://github.com/linzin86/LinzinDeskClock/releases"
+            )
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        Log.e("DeskClockUpdate", "Check update failed", e)
+        null
+    }
 }
 
 // ==========================================
@@ -1672,6 +1736,9 @@ fun ClockSettingsDialog(
     burnInProtectionEnabled: Boolean,
     onBurnInProtectionChange: (Boolean) -> Unit,
     onOpenTutorial: () -> Unit,
+    updateInfo: AppUpdateInfo?,
+    isCheckingUpdate: Boolean,
+    onCheckUpdateClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var showSuggestDualDialog by remember { mutableStateOf(false) }
@@ -2163,6 +2230,145 @@ fun ClockSettingsDialog(
                             modifier = Modifier.padding(end = 4.dp)
                         )
                     }
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
+
+                    // 10. 軟體版本與更新專區
+                    val uriHandler = LocalUriHandler.current
+                    val context = LocalContext.current
+                    val pInfo = remember(context) {
+                        try {
+                            context.packageManager.getPackageInfo(context.packageName, 0)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    val versionName = pInfo?.versionName ?: "1.0.0"
+                    val versionCode = remember(context) {
+                        try {
+                            if (pInfo != null) {
+                                androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pInfo)
+                            } else 1L
+                        } catch (e: Exception) {
+                            1L
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.settings_version_title),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.settings_version_current, versionName, versionCode.toString()),
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+
+                            // 手動檢查按鈕
+                            Surface(
+                                onClick = {
+                                    if (!isCheckingUpdate) {
+                                        onCheckUpdateClick()
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF2C2C34),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isCheckingUpdate) {
+                                            stringResource(R.string.settings_btn_checking_update)
+                                        } else {
+                                            stringResource(R.string.settings_btn_check_update)
+                                        },
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isCheckingUpdate) Color.Gray else Color(0xFF81C7D4)
+                                    )
+                                }
+                            }
+                        }
+
+                        // 如果有檢查到新版本，展開亮色提醒橫幅與直連下載按鈕
+                        if (updateInfo?.hasUpdate == true) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF1E3A45),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF81C7D4))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "🚀",
+                                            fontSize = 16.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = stringResource(R.string.settings_update_available_title, updateInfo.latestVersion),
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Text(
+                                        text = stringResource(R.string.settings_update_available_desc),
+                                        color = Color(0xFFC4C4CC),
+                                        fontSize = 12.5.sp,
+                                        lineHeight = 17.sp
+                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Surface(
+                                        onClick = {
+                                            uriHandler.openUri(updateInfo.releaseUrl)
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF81C7D4),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(38.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = stringResource(R.string.settings_btn_go_to_github_releases),
+                                                color = Color(0xFF041E49),
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Surface(
@@ -2231,6 +2437,16 @@ fun InitialScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
+    // 動態抓取 versionName（如 "1.0.1"）
+    val versionName = remember(context) {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.1"
+        } catch (e: Exception) {
+            "1.0.1"
+        }
+    }
+
     val uriHandler = LocalUriHandler.current
     var showNonFoldableDialog by remember { mutableStateOf(false) }
 
@@ -2276,6 +2492,7 @@ fun InitialScreen(
             val isLandscape = maxWidth > maxHeight
 
             if (isLandscape) {
+                // 橫向佈局
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2358,7 +2575,7 @@ fun InitialScreen(
                     }
                 }
             } else {
-                // 自適應單一垂直容器：防止方塊比例內螢幕文字與按鈕重疊
+                // 直向佈局
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2446,6 +2663,18 @@ fun InitialScreen(
                 }
             }
 
+            // 👉 橫向與直向共用的右下角版本號（如 v1.0.1）
+            Text(
+                text = "v$versionName",
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                color = Color.White.copy(alpha = 0.35f),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 4.dp, bottom = 2.dp)
+            )
+
             if (showNonFoldableDialog) {
                 NonFoldableDialog(
                     onDismiss = { showNonFoldableDialog = false },
@@ -2478,6 +2707,31 @@ fun DeskClockScreen(
     val currentLocationStr = stringResource(R.string.current_location)
 
     val prefs = remember { context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE) }
+
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    val currentVersionName = remember(context) {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val info = checkForAppUpdate(currentVersionName)
+        if (info != null) {
+            updateInfo = info
+            if (info.hasUpdate) {
+                Toast.makeText(
+                    context,
+                    context.applicationContext.getString(R.string.toast_update_available, info.latestVersion),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
 
     var burnInProtectionEnabled by remember {
         mutableStateOf(prefs.getBoolean("pref_burn_in_enabled", true))
@@ -2577,6 +2831,56 @@ fun DeskClockScreen(
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         weatherEnabled = granted
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, weatherEnabled, layoutMode) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+                // 當擁有權限、在雙區塊模式、功能已開啟但目前還沒有抓到天氣時立即觸發
+                if ((hasFine || hasCoarse) && weatherEnabled && layoutMode != ClockLayoutMode.SINGLE && weatherInfo == null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                            val location = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                                ?: locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+
+                            val lat = location?.latitude ?: 24.838
+                            val lon = location?.longitude ?: 121.017
+
+                            var detectedCity = defaultCityStr
+                            try {
+                                val geocoder = Geocoder(context, Locale.getDefault())
+                                val addresses = geocoder.getFromLocation(lat, lon, 1)
+                                if (!addresses.isNullOrEmpty()) {
+                                    val addr = addresses[0]
+                                    detectedCity = addr.locality
+                                        ?: addr.subAdminArea
+                                                ?: addr.adminArea
+                                                ?: currentLocationStr
+                                }
+                            } catch (e: Exception) {
+                                // 保持預設
+                            }
+
+                            val data = fetchOpenMeteoWeather(lat, lon, detectedCity)
+                            withContext(Dispatchers.Main) {
+                                weatherInfo = data
+                            }
+                        } catch (e: Exception) {
+                            Log.e("DeskClockWeather", "OnResume fetch error", e)
+                        }
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // 天氣更新：僅在雙區塊模式且功能開啟時在背景輪詢以省電
@@ -2961,6 +3265,21 @@ fun DeskClockScreen(
                     isTutorialFromSettings = true
                     showGestureTutorial = true
                 },
+                updateInfo = updateInfo,
+                isCheckingUpdate = isCheckingUpdate,
+                onCheckUpdateClick = {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        isCheckingUpdate = true
+                        val result = checkForAppUpdate(currentVersionName)
+                        isCheckingUpdate = false
+                        updateInfo = result
+                        if (result == null) {
+                            Toast.makeText(context, "檢查更新失敗，請確認網路連線", Toast.LENGTH_SHORT).show()
+                        } else if (!result.hasUpdate) {
+                            Toast.makeText(context, "目前已是最新版本 ($currentVersionName)", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
                 onDismiss = { isSettingsOpen = false }
             )
         }
@@ -3145,6 +3464,11 @@ fun SideDateWidget(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // 👉 核心縮放係數：以摺疊機標準高度 360dp 為基準，在大平板上自動等比放大 (最高放大至 1.85 倍)
+        val containerWidth = maxWidth
+        val scale = (maxHeight / 360.dp).coerceIn(1.0f, 1.85f)
+        val horizontalPad = (18.dp * scale).coerceAtMost(36.dp)
+
         val maxEventsToShow = when {
             maxHeight < 260.dp -> 1
             maxHeight < 355.dp -> 2
@@ -3157,31 +3481,34 @@ fun SideDateWidget(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    horizontal = 18.dp,
+                    horizontal = horizontalPad,
                     vertical = when {
-                        eventCount >= 3 -> 8.dp
-                        eventCount == 2 -> 10.dp
-                        else -> 14.dp
+                        eventCount >= 3 -> 8.dp * scale
+                        eventCount == 2 -> 10.dp * scale
+                        else -> 14.dp * scale
                     }
                 ),
+            // 若在大平板上，避免兩端扯太開，內容自然均勻分布
             verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // 1. 頂部星期與大日期
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val headerFontSize = ((if (eventCount >= 3) 25f else 27f) * scale).sp
                     Text(
                         text = dayOfWeekStr,
                         color = colorThu,
-                        fontSize = if (eventCount >= 3) 25.sp else 27.sp,
+                        fontSize = headerFontSize,
                         fontWeight = FontWeight.Bold,
                         style = TextStyle(
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
                         )
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp * scale))
                     Text(
                         text = monthShortStr,
                         color = Color.White,
-                        fontSize = if (eventCount >= 3) 25.sp else 27.sp,
+                        fontSize = headerFontSize,
                         fontWeight = FontWeight.Bold,
                         style = TextStyle(
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
@@ -3189,12 +3516,13 @@ fun SideDateWidget(
                     )
                 }
 
-                val digitSize = when {
-                    visibleEvents.isEmpty() -> 72.sp
-                    eventCount >= 3 -> 48.sp
-                    eventCount == 2 -> 54.sp
-                    else -> 64.sp
+                val baseDigitSize = when {
+                    visibleEvents.isEmpty() -> 72f
+                    eventCount >= 3 -> 48f
+                    eventCount == 2 -> 54f
+                    else -> 64f
                 }
+                val digitSize = (baseDigitSize * scale).sp
 
                 Text(
                     text = dayOfMonthStr,
@@ -3205,41 +3533,42 @@ fun SideDateWidget(
                     style = TextStyle(
                         platformStyle = PlatformTextStyle(includeFontPadding = false)
                     ),
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = 2.dp * scale)
                 )
             }
 
+            // 2. 中間近期行程卡片
             if (visibleEvents.isNotEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                        .padding(vertical = 2.dp * scale),
+                    verticalArrangement = Arrangement.spacedBy(4.dp * scale)
                 ) {
                     visibleEvents.forEach { event ->
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(7.dp))
+                                .clip(RoundedCornerShape((7 * scale).dp))
                                 .background(Color(0xFF1E1E24))
                                 .padding(
-                                    horizontal = 8.dp,
-                                    vertical = if (eventCount >= 3) 2.5.dp else 3.5.dp
+                                    horizontal = 10.dp * scale,
+                                    vertical = (if (eventCount >= 3) 3.5.dp else 4.5.dp) * scale
                                 ),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                            verticalArrangement = Arrangement.spacedBy(1.5.dp * scale)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(4.5.dp)
+                                        .size(5.dp * scale)
                                         .clip(CircleShape)
                                         .background(colorAccent)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(5.dp * scale))
                                 Text(
                                     text = event.timeLabel,
                                     color = colorThu,
-                                    fontSize = 9.5.sp,
+                                    fontSize = (9.5f * scale).sp,
                                     fontWeight = FontWeight.Bold,
                                     style = TextStyle(
                                         platformStyle = PlatformTextStyle(includeFontPadding = false)
@@ -3250,7 +3579,7 @@ fun SideDateWidget(
                             Text(
                                 text = event.title,
                                 color = Color.White,
-                                fontSize = 10.5.sp,
+                                fontSize = (11f * scale).sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -3264,15 +3593,21 @@ fun SideDateWidget(
                 }
             }
 
+            // 3. 底部月曆網格 (依寬度與高度動態計算格子大小，不再寫死 16.dp)
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = monthFullStr,
                     color = colorAccent,
-                    fontSize = 10.sp,
+                    fontSize = (10f * scale).sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.2.sp,
-                    modifier = Modifier.padding(bottom = 2.dp)
+                    modifier = Modifier.padding(bottom = 3.dp * scale)
                 )
+
+                // 動態計算月曆單格大小：寬度均分，最大可達 32.dp（手機上維持原本約 16.dp）
+                val availableWidth = containerWidth - (horizontalPad * 2)
+                val cellSize = (availableWidth / 7.6f).coerceIn(16.dp, 32.dp)
+                val cellFontSize = (cellSize.value * 0.52f).sp
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3282,22 +3617,22 @@ fun SideDateWidget(
                         Text(
                             text = dayName,
                             color = Color(0xFF8E8E93),
-                            fontSize = 9.sp,
+                            fontSize = (cellFontSize.value * 0.95f).sp,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.width(20.dp)
+                            modifier = Modifier.width(cellSize)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(1.dp))
+                Spacer(modifier = Modifier.height(2.dp * scale))
 
                 val totalCells = ((firstDayOfWeek + maxDay + 6) / 7) * 7
                 for (row in 0 until (totalCells / 7)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 0.6.dp),
+                            .padding(vertical = (0.6f * scale).dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         for (col in 0 until 7) {
@@ -3308,10 +3643,10 @@ fun SideDateWidget(
                                 val isToday = (dayNum == currentDay)
                                 Box(
                                     modifier = Modifier
-                                        .size(16.dp)
+                                        .size(cellSize)
                                         .then(
                                             if (isToday) Modifier.border(
-                                                width = 1.2.dp,
+                                                width = (1.2f * scale).dp,
                                                 color = colorAccent,
                                                 shape = CircleShape
                                             ) else Modifier
@@ -3321,7 +3656,7 @@ fun SideDateWidget(
                                     Text(
                                         text = "$dayNum",
                                         color = if (isToday) colorAccent else Color.White,
-                                        fontSize = 8.5.sp,
+                                        fontSize = cellFontSize,
                                         fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
                                         textAlign = TextAlign.Center,
                                         style = TextStyle(
@@ -3330,7 +3665,7 @@ fun SideDateWidget(
                                     )
                                 }
                             } else {
-                                Spacer(modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.size(cellSize))
                             }
                         }
                     }
@@ -4764,7 +5099,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             brand.contains("samsung") -> "1"
             brand.contains("oppo") || brand.contains("oneplus") -> "1"
             brand.contains("vivo") -> "1"
-            brand.contains("xiaomi") -> "1"
+            brand.contains("xiaomi") -> "0"
             else -> "3"
         }
     }

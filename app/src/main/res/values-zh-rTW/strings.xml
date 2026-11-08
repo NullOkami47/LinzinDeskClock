@@ -99,4 +99,17 @@
     <string name="layout_switch_opt_left">是（左大右小）</string>
     <string name="layout_switch_opt_right">是（右大左小）</string>
 
+    <!-- 更新檢查相關 -->
+    <string name="toast_update_available">發現新版本（%1$s）！請至設定畫面底部下載更新</string>
+    <string name="toast_update_failed">檢查更新失敗，請確認網路連線</string>
+    <string name="toast_update_latest">目前已是最新版本（%1$s）</string>
+
+    <string name="settings_version_title">版本資訊</string>
+    <string name="settings_version_current">目前版本：v%1$s (Build %2$s)</string>
+    <string name="settings_btn_check_update">檢查更新</string>
+    <string name="settings_btn_checking_update">檢查中...</string>
+    <string name="settings_update_available_title">發現新版本：%1$s</string>
+    <string name="settings_update_available_desc">新版本已在 GitHub 上發布，建議立即前往下載更新。</string>
+    <string name="settings_btn_go_to_github_releases">前往 GitHub Releases 下載</string>
+
 </resources>

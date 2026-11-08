@@ -102,4 +102,17 @@
     <string name="layout_switch_opt_left">是（左大右小）</string>
     <string name="layout_switch_opt_right">是（右大左小）</string>
 
+    <!-- 更新检查相关 -->
+    <string name="toast_update_available">发现新版本（%1$s）！请至设置页面底部下载更新</string>
+    <string name="toast_update_failed">检查更新失败，请确认网络连接</string>
+    <string name="toast_update_latest">当前已是最新版本（%1$s）</string>
+
+    <string name="settings_version_title">版本信息</string>
+    <string name="settings_version_current">当前版本：v%1$s (Build %2$s)</string>
+    <string name="settings_btn_check_update">检查更新</string>
+    <string name="settings_btn_checking_update">检查中...</string>
+    <string name="settings_update_available_title">发现新版本：%1$s</string>
+    <string name="settings_update_available_desc">新版本已在 GitHub 上发布，建议立即前往下载更新。</string>
+    <string name="settings_btn_go_to_github_releases">前往 GitHub Releases 下载</string>
+
 </resources>
