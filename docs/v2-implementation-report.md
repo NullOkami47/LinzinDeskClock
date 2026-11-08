@@ -52,6 +52,8 @@ MainActivity 原 5,074 行，設定與 DeskClockScreen 已移至 settings/ui 目
 
 ADB 已將本機驗證過的 debug APK 安裝至已連接手機的 user 0，回應 Success。唯讀確認 versionName=2.0、versionCode=2、minSdk=31、targetSdk=37；stopped=true、notLaunched=true，沒有 App 程序。沒有發出 App 啟動、instrumentation、權限變更或畫面操作命令。安裝 SHA-256：7437ed7941576badd4e2bb25ef9ca266ea5433544d84a4e599f1dbb58855beb7。此為 debug 簽署版本，不是 Play 商店發行包。
 
-GitHub-hosted run 42399769799 的 debug/test/lint 成功，模擬器環境前提失敗（顯示邊界與預裝媒體工作階段）；run 42403706282 的 debug/test/lint 成功，KVM 準備失敗。已修正專用顯示／媒體 fixture 與 KVM udev 套用時序，修正版結果將以實際 run 收據補充。
+GitHub-hosted run 42399769799 的 debug/test/lint 成功，模擬器環境前提失敗（顯示邊界與預裝媒體工作階段）；run 42403706282 的 debug/test/lint 成功，KVM 準備失敗。已修正專用顯示／媒體 fixture 與 KVM udev 套用時序，最終 run 42439010639（commit e6166163ab43f76b8609d569319b61f3c3dcb6ea）整體 SUCCESS，雲端報告下載核對：120 JVM tests、28 instrumentation tests，全部 0 failures/errors/skips；lint 0 errors、95 warnings、4 hints。雲端比本機多一項環境相關 warning，不影響成功狀態。
 
 依使用者偏好已準備 self-hosted 備援，但 runner 註冊／背景啟動遭自動核准審查以 blocked by policy 拒絕，未提供更具體理由；未繞過、未取得註冊 token、沒有實際 self-hosted run。保留手動 dispatch 工作流程，不自動排隊沒有 runner 的工作。
+
+最終 GitHub Actions 收據：https://github.com/NullOkami47/LinzinDeskClock/actions/runs/42439010639 。本機已安裝 APK 的應用程式／Gradle 輸入自 971855f 後沒有變更；後續提交僅 CI 與文件。精確檔案清單見 v2-files-changed.md。測試結束已停止專用模擬器與 private adb server，手機連線未受影響。

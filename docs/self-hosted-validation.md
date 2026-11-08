@@ -40,3 +40,7 @@ The archive is downloaded and extracted under the QA directory. The local listen
 The sole attempted combined registration/background-start command was rejected before execution by automatic approval review with `blocked by policy`, without a more specific reason. No registration token was obtained by that command, printed or persisted. No runner was configured or started. This is an execution-approval blocker, not a GitHub registration API permission error. It was not retried through another tool or delegated to bypass that restriction. Registration must wait until the execution restriction is resolved; do not represent the prepared workflow as an actual self-hosted pass.
 
 The original hosted run 42399769799 was independently confirmed: debug-test-lint succeeded and instrumentation-api-35 failed. Parent reports the second hosted run 42403706282 also passed the build job and failed at KVM setup. Main branch was not changed by this work.
+
+## Final delivery update
+
+Hosted run 42439010639 succeeded after fixture and KVM timing fixes: 120 JVM tests and 28 instrumentation tests, zero failures/errors/skips. No self-hosted run is claimed. The prepared fallback remains manual-only; the dedicated local emulator and private adb server were shut down after verification. Restart and revalidate their actual identity before a future authorised dispatch. The personal phone installation was completed separately by the parent without launching the app; Android reported stopped=true and notLaunched=true.

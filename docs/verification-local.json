@@ -102,5 +102,32 @@
     "launchCommandIssued": false,
     "apkSha256": "7437ed7941576badd4e2bb25ef9ca266ea5433544d84a4e599f1dbb58855beb7",
     "verification": "ADB install and read-only package/process confirmation only; personal-device runtime testing not authorised."
+  },
+  "githubHosted": {
+    "repository": "NullOkami47/LinzinDeskClock",
+    "runId": 42439010639,
+    "commit": "e6166163ab43f76b8609d569319b61f3c3dcb6ea",
+    "conclusion": "success",
+    "jvmTests": 120,
+    "instrumentationTests": 28,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "lint": {
+      "errors": 0,
+      "warnings": 95,
+      "hints": 4
+    },
+    "reportDownloadedAndChecked": true
+  },
+  "selfHosted": {
+    "executed": false,
+    "registration": "blocked by automatic approval review: blocked by policy",
+    "fallbackPrepared": true
+  },
+  "cleanup": {
+    "dedicatedEmulatorStopped": true,
+    "privateAdbStopped": true,
+    "physicalPhoneAdbUntouched": true
   }
 }

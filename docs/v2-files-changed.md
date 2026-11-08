@@ -1,9 +1,11 @@
 # Version 2 file inventory
 
-Compared with upstream de82efc. A = added; M = modified. The directories group the implementation, resources, tests and build support; generated APKs and local toolchains are excluded.
+Compared with upstream de82efc. A = added; M = modified. Generated APKs and local toolchains are excluded.
 
 | Change | Path |
 | --- | --- |
+| A | .github/actionlint.yaml |
+| A | .github/workflows/android-self-hosted.yml |
 | A | .github/workflows/android.yml |
 | M | .gitignore |
 | A | DESIGN.md |
@@ -87,7 +89,9 @@ Compared with upstream de82efc. A = added; M = modified. The directories group t
 | A | docs/build-environment.md |
 | A | docs/cycle-state-contract.md |
 | A | docs/emulator-testing.md |
+| A | docs/self-hosted-validation.md |
 | A | docs/v2-device-checklist.md |
+| A | docs/v2-files-changed.md |
 | A | docs/v2-implementation-plan.md |
 | A | docs/v2-implementation-report.md |
 | A | docs/v2-requirements.md |
@@ -100,3 +104,4 @@ Compared with upstream de82efc. A = added; M = modified. The directories group t
 | A | scripts/Set-AndroidEnvironment.ps1 |
 | A | scripts/build-android.ps1 |
 | A | scripts/install-android-toolchain.ps1 |
+| A | scripts/run-self-hosted-validation.ps1 |
