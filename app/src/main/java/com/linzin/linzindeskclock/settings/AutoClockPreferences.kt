@@ -18,7 +18,4 @@ class AutoClockPreferences(context: Context) {
     var chargingMode: ChargingMode
         get() = runCatching { ChargingMode.valueOf(preferences.getString("auto_charging_mode", null) ?: "NOT_REQUIRED") }.getOrDefault(ChargingMode.NOT_REQUIRED)
         set(value) { preferences.edit().putString("auto_charging_mode", value.name).apply() }
-    var hideMediaWhenLocked: Boolean
-        get() = preferences.getBoolean("auto_hide_media", true)
-        set(value) { preferences.edit().putBoolean("auto_hide_media", value).apply() }
 }

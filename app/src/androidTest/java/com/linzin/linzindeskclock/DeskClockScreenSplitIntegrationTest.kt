@@ -16,6 +16,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
@@ -24,6 +27,10 @@ import com.linzin.linzindeskclock.layout.SplitLayoutPreferences
 import com.linzin.linzindeskclock.layout.SplitLayoutState
 import com.linzin.linzindeskclock.ui.DeskClockScreen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import java.io.File
+import android.graphics.Bitmap
+import androidx.test.espresso.Espresso.pressBack
 import org.junit.Rule
 import org.junit.Test
 
@@ -33,7 +40,7 @@ class DeskClockScreenSplitIntegrationTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun screenSnapsEachAnchorAndPersistsGeometryAcrossBothDualModeChanges() {
+    fun screenSnapsEachAnchorAndPreservesUserSelectedClockSide() {
         val prefs = showScreen()
         for ((raw, expected) in listOf(
             0.53f to 0.5f, 0.47f to 0.5f, 0.31f to 0.3f,
@@ -61,9 +68,49 @@ class DeskClockScreenSplitIntegrationTest {
             compose.mainClock.autoAdvance = true
         }
         assertGeometry(0.3f)
-        assertSaved(prefs, 0.3f, ClockSide.RIGHT)
+        assertSaved(prefs, 0.3f, ClockSide.LEFT)
     }
 
+    @Test
+    fun explicitSideSelectionPreservesRatioAndDraggingKeepsTheSmallerClockOnThatSide() {
+        val prefs = showScreen()
+        selectClockSide(ClockSide.RIGHT)
+        assertSaved(prefs, 0.7f, ClockSide.RIGHT)
+        assertClockSide(ClockSide.RIGHT)
+        capture("right-clock-small")
+        dragAndRelease(prefs, 0.32f, 0.3f)
+        selectClockSide(ClockSide.LEFT)
+        assertSaved(prefs, 0.3f, ClockSide.LEFT)
+        assertClockSide(ClockSide.LEFT)
+        capture("left-clock-small")
+        dragAndRelease(prefs, 0.68f, 0.7f)
+    }
+
+    private fun selectClockSide(side: ClockSide) {
+        compose.onNodeWithTag("clock_panel").performTouchInput { click() }
+        compose.onNodeWithTag("clock_settings").performClick()
+        val mode = if (side == ClockSide.LEFT) "DUAL_LEFT_LARGE" else "DUAL_RIGHT_LARGE"
+        compose.onNodeWithTag("layout_choice_$mode").performScrollTo().performClick()
+        pressBack()
+        compose.waitForIdle()
+    }
+
+    private fun assertClockSide(side: ClockSide) {
+        val clock = compose.onNodeWithTag("clock_panel").fetchSemanticsNode().boundsInRoot
+        val widgets = compose.onNodeWithTag("widget_panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("Clock follows the explicit side, independent of width", if (side == ClockSide.LEFT) clock.right <= widgets.left else clock.left >= widgets.right)
+    }
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val image = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            val directory = File(checkNotNull(instrumentation.targetContext.externalCacheDir), "split-user-choice")
+            check(directory.isDirectory || directory.mkdirs())
+            File(directory, "$name.png").outputStream().use { check(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally { image.recycle() }
+    }
     private var touchSlop = 0f
 
     private fun showScreen(): SharedPreferences {
@@ -107,7 +154,7 @@ class DeskClockScreenSplitIntegrationTest {
         val bounds = root().fetchSemanticsNode().boundsInRoot
         val hit = divider().fetchSemanticsNode().boundsInRoot
         // Exercise the invisible widget-side part of the actual 48dp target.
-        val side = if (before >= 0.5f) 1f else -1f
+        val side = if (savedBefore.clockSide == ClockSide.LEFT) 1f else -1f
         val start = hit.center - bounds.topLeft + Offset(side * hit.width * 0.3f, 0f)
         val direction = if (raw < before) -1f else 1f
         root().performTouchInput {
@@ -118,7 +165,8 @@ class DeskClockScreenSplitIntegrationTest {
         compose.runOnIdle { assertEquals(savedBefore, SplitLayoutPreferences.load(prefs)) }
         root().performTouchInput { up() }
         assertGeometry(expected)
-        assertSaved(prefs, expected, if (raw < 0.5f) ClockSide.RIGHT else ClockSide.LEFT)
+        assertSaved(prefs, expected, savedBefore.clockSide)
+        assertClockSide(savedBefore.clockSide)
     }
 
     private fun assertGeometry(ratio: Float) {

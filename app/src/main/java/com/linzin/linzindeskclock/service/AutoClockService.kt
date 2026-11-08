@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.linzin.linzindeskclock.MainActivity
 import com.linzin.linzindeskclock.R
 import com.linzin.linzindeskclock.autostart.*
+import com.linzin.linzindeskclock.power.shouldPauseAutoClockForLowBattery
 import com.linzin.linzindeskclock.settings.AutoClockPreferences
 import java.lang.ref.WeakReference
 
@@ -91,7 +92,13 @@ class AutoClockService : Service() {
         if(intent?.action == STOP) {
             AutoClockPreferences(this).enabled = false; stopSelf(); return START_NOT_STICKY
         }
-        if(!AutoClockPreferences(this).enabled) { stopSelf(); return START_NOT_STICKY }
+        val settings = AutoClockPreferences(this)
+        if(!settings.enabled || shouldPauseAutoClockForLowBattery(this)) {
+            running = false
+            settings.lastActivation = "MONITOR_STOPPED"
+            stopSelf()
+            return START_NOT_STICKY
+        }
         try {
             if(Build.VERSION.SDK_INT >= 34) startForeground(MONITOR_ID, monitoringNotification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             else startForeground(MONITOR_ID, monitoringNotification())

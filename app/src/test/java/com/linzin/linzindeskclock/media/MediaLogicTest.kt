@@ -77,40 +77,22 @@ class MediaLogicTest {
         assertEquals(11_000L, PlaybackClock(10_000, 1_000, 1f, PlaybackPhase.PLAYING).positionAt(2_000, 0))
         assertEquals(Long.MAX_VALUE, PlaybackClock(Long.MAX_VALUE - 5, 1, Float.MAX_VALUE, PlaybackPhase.PLAYING).positionAt(Long.MAX_VALUE, 0))
     }
-    @Test fun uiLockDisablesControlsWithoutHidingArtworkOrMetadata() {
-        val policy = mediaPresentationPolicy(isLocked = false, hideWhenLocked = true, controlsEnabled = false)
-        assertFalse(policy.hideContent)
-        assertFalse(policy.allowControls)
+    @Test fun explicitUiLockStillBlocksTransport() {
+        assertFalse(canControlMedia(true,true,true,true,7,7))
+        assertTrue(canControlMedia(true,true,true,false,7,7))
     }
 
-    @Test fun privacyHiddenBlocksTransportAndUiLockStillWinsWhenPrivacyIsOff() {
-        val hidden = mediaPresentationPolicy(isLocked = true, hideWhenLocked = true, controlsEnabled = true)
-        assertTrue(hidden.hideContent)
-        assertFalse(hidden.allowControls)
-        assertFalse(canControlMedia(true, true, true, !hidden.allowControls, 7, 7))
-        val uiLocked = mediaPresentationPolicy(isLocked = true, hideWhenLocked = false, controlsEnabled = false)
-        assertFalse(uiLocked.hideContent)
-        assertFalse(uiLocked.allowControls)
-        assertFalse(canControlMedia(true, true, true, !uiLocked.allowControls, 7, 7))
-        assertTrue(mediaPresentationPolicy(false, true, true).allowControls)
-    }
-
-    @Test fun lockedPrivacyOptOutPermitsAuthorisedSupportedTransport() {
-        val policy = mediaPresentationPolicy(isLocked = true, hideWhenLocked = false, controlsEnabled = true)
-        assertFalse(policy.hideContent)
-        assertTrue(policy.allowControls)
-        assertTrue(canControlMedia(true, true, true, !policy.allowControls, 7, 7))
-        val actions = SupportedActions(play = true, pause = true, previous = true, next = true, seek = true)
-        for ((command, phase) in listOf(
+    @Test fun authorisationAndSessionIdentityStillProtectLockScreenTransport() {
+        val actions=SupportedActions(play=true,pause=true,previous=true,next=true,seek=true)
+        for((command,phase) in listOf(
             MediaCommand.PLAY to PlaybackPhase.PAUSED,
             MediaCommand.PAUSE to PlaybackPhase.PLAYING,
             MediaCommand.PREVIOUS to PlaybackPhase.PLAYING,
             MediaCommand.NEXT to PlaybackPhase.PLAYING,
-            MediaCommand.SEEK to PlaybackPhase.PLAYING,
-        )) assertTrue(isCommandSupported(command, phase, actions, 60_000))
-        assertFalse(isCommandSupported(MediaCommand.TOGGLE, PlaybackPhase.PLAYING, actions, 60_000))
-        assertFalse(canControlMedia(true, false, true, !policy.allowControls, 7, 7))
-        assertFalse(canControlMedia(true, true, false, !policy.allowControls, 7, 7))
-        assertFalse(canControlMedia(true, true, true, !policy.allowControls, 7, 8))
+            MediaCommand.SEEK to PlaybackPhase.PLAYING
+        )) assertTrue(isCommandSupported(command,phase,actions,60_000))
+        assertFalse(canControlMedia(true,false,true,false,7,7))
+        assertFalse(canControlMedia(true,true,false,false,7,7))
+        assertFalse(canControlMedia(true,true,true,false,7,8))
     }
 }

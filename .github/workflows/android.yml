@@ -5,6 +5,20 @@ on:
     branches: [main, 'feat/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      executionTarget:
+        description: 'Run on GitHub-hosted Linux or the dedicated Windows PC'
+        required: true
+        default: github-hosted
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
+      branch:
+        description: 'Self-hosted only: must equal feat/desk-clock-v2'
+        required: true
+        default: feat/desk-clock-v2
+        type: string
 
 permissions:
   contents: read
@@ -15,6 +29,7 @@ concurrency:
 
 jobs:
   debug-test-lint:
+    if: github.event_name != 'workflow_dispatch' || inputs.executionTarget != 'self-hosted'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -138,3 +153,15 @@ jobs:
             .local/background-clock-ci/
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+
+  self-hosted-validation:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.executionTarget == 'self-hosted' &&
+      inputs.branch == 'feat/desk-clock-v2' &&
+      github.repository == 'NullOkami47/LinzinDeskClock' &&
+      github.ref == 'refs/heads/feat/desk-clock-v2' &&
+      github.actor == 'NullOkami47'
+    uses: ./.github/workflows/android-self-hosted.yml
+    with:
+      branch: ${{ inputs.branch }}

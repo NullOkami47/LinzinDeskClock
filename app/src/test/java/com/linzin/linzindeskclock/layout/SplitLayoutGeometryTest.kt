@@ -11,8 +11,11 @@ class SplitLayoutGeometryTest {
                 0.25f to 0.3f, 0.35f to 0.3f, 0.45f to 0.5f,
                 0.55f to 0.5f, 0.65f to 0.7f, 0.75f to 0.7f
             )) {
-                assertEquals("ratio=$ratio width=$width", target,
-                    SplitLayoutState(ratio).releaseAtWidth(width).ratio, 0f)
+                for (side in ClockSide.entries) {
+                    val released = SplitLayoutState(ratio, side).releaseAtWidth(width)
+                    assertEquals("ratio=$ratio width=$width", target, released.ratio, 0f)
+                    assertEquals(side, released.clockSide)
+                }
             }
         }
     }
@@ -41,10 +44,15 @@ class SplitLayoutGeometryTest {
 
     @Test
     fun `pixel based centre release retains the side before rounding`() {
-        assertEquals(ClockSide.RIGHT, SplitLayoutState(0.49999f).releaseAtWidth(1000).clockSide)
-        assertEquals(ClockSide.LEFT, SplitLayoutState(0.50001f).releaseAtWidth(1000).clockSide)
-        assertEquals(0.3f, SplitLayoutState(0.31f).releaseAtWidth(0).ratio, 0f)
-        assertEquals(0.7f, SplitLayoutState(0.69f).releaseAtWidth(-1).ratio, 0f)
+        for (side in ClockSide.entries) {
+            assertEquals(side, SplitLayoutState(0.49999f, side).releaseAtWidth(1000).clockSide)
+            assertEquals(side, SplitLayoutState(0.50001f, side).releaseAtWidth(1000).clockSide)
+            for ((ratio, width, target) in listOf(Triple(0.31f, 0, 0.3f), Triple(0.69f, -1, 0.7f))) {
+                val released = SplitLayoutState(ratio, side).releaseAtWidth(width)
+                assertEquals(target, released.ratio, 0f)
+                assertEquals(side, released.clockSide)
+            }
+        }
     }
     @Test
     fun `hit zone overlays the exact split and does not consume panel width`() {
@@ -53,8 +61,8 @@ class SplitLayoutGeometryTest {
     }
 
     @Test
-    fun `clock and widgets swap physical placement while preserving their slots`() {
-        val actual = SplitLayoutState(0.3f).geometry(1000, 48)
+    fun `an explicitly right clock places widgets on the left`() {
+        val actual = SplitLayoutState(0.3f, ClockSide.RIGHT).geometry(1000, 48)
         assertEquals(SplitLayoutGeometry(300, 300, 700, 0, 300, 276, 48), actual)
     }
 
@@ -73,7 +81,7 @@ class SplitLayoutGeometryTest {
     @Test
     fun `small windows clamp only the hit zone and never shift the actual split`() {
         val actual = SplitLayoutState(0.2f).geometry(80, 48)
-        assertEquals(SplitLayoutGeometry(16, 16, 64, 0, 16, 0, 48), actual)
+        assertEquals(SplitLayoutGeometry(16, 0, 16, 16, 64, 0, 48), actual)
         val mirrored = SplitLayoutState(0.8f).geometry(80, 48)
         assertEquals(SplitLayoutGeometry(64, 0, 64, 64, 16, 32, 48), mirrored)
     }
@@ -81,8 +89,32 @@ class SplitLayoutGeometryTest {
     @Test
     fun `a container narrower than the hit target is fully covered without negative sizes`() {
         val actual = SplitLayoutState(0.2f).geometry(32, 48)
-        assertEquals(SplitLayoutGeometry(6, 6, 26, 0, 6, 0, 32), actual)
+        assertEquals(SplitLayoutGeometry(6, 0, 6, 6, 26, 0, 32), actual)
         assertEquals(SplitLayoutGeometry(0, 0, 0, 0, 0, 0, 0), SplitLayoutState().geometry(0, 48))
+    }
+
+    @Test
+    fun `a smaller clock panel stays on its chosen physical side`() {
+        assertEquals(SplitLayoutGeometry(300, 0, 300, 300, 701, 276, 48),
+            SplitLayoutState(0.3f, ClockSide.LEFT).geometry(1001, 48))
+        assertEquals(SplitLayoutGeometry(701, 701, 300, 0, 701, 677, 48),
+            SplitLayoutState(0.7f, ClockSide.RIGHT).geometry(1001, 48))
+    }
+
+    @Test
+    fun `explicit side changes swap content without moving the divider or hit zone`() {
+        for (ratio in listOf(0.3f, 0.5f, 0.7f)) {
+            val state = SplitLayoutState(ratio, ClockSide.LEFT)
+            val left = state.geometry(1000, 48)
+            val right = state.withClockSide(ClockSide.RIGHT).geometry(1000, 48)
+            assertEquals(left.splitPx, right.splitPx)
+            assertEquals(left.hitLeftPx, right.hitLeftPx)
+            assertEquals(left.hitWidthPx, right.hitWidthPx)
+            assertEquals(left.widgetsLeftPx, right.clockLeftPx)
+            assertEquals(left.widgetsWidthPx, right.clockWidthPx)
+            assertEquals(left.clockLeftPx, right.widgetsLeftPx)
+            assertEquals(left.clockWidthPx, right.widgetsWidthPx)
+        }
     }
 
     @Test(expected = IllegalArgumentException::class)

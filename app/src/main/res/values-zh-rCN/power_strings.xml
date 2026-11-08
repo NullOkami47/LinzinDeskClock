@@ -1,0 +1,8 @@
+<resources>
+    <string name="low_battery_title">低电量保护</string>
+    <string name="low_battery_description">仅在未接通电源时触发。降亮度会暂时将时钟亮度限制在 8%；充电或电量恢复后还原原设置。退出会关闭时钟并停止监测，重新打开后可恢复。</string>
+    <string name="low_battery_off">关闭</string>
+    <string name="low_battery_dim">自动降低亮度</string>
+    <string name="low_battery_exit">退出时钟</string>
+    <string name="low_battery_threshold">电量低于 %1$d%% 时触发</string>
+</resources>

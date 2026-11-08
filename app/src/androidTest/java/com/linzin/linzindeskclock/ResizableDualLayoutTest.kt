@@ -73,7 +73,7 @@ class ResizableDualLayoutTest {
             compose.mainClock.autoAdvance = true
         }
         assertRatio(harness, 0.47f)
-        assertPhysicalSplit(0.47f, ClockSide.RIGHT)
+        assertPhysicalSplit(0.47f, ClockSide.LEFT)
         compose.runOnIdle {
             for (expected in listOf(0.54f, 0.53f, 0.52f, 0.49f, 0.47f)) {
                 assertTrue("Missing continuous update for $expected: ${harness.updates}",
@@ -92,8 +92,8 @@ class ResizableDualLayoutTest {
     }
 
     @Test
-    fun releaseSnapsLowerCentreRegionAndKeepsTheClockOnTheRight() {
-        assertReleaseSnap(targetRatio = 0.47f, expectedSide = ClockSide.RIGHT)
+    fun releaseSnapsLowerCentreRegionAndKeepsTheChosenClockSide() {
+        assertReleaseSnap(targetRatio = 0.47f, expectedSide = ClockSide.LEFT)
     }
 
     @Test
@@ -147,7 +147,7 @@ class ResizableDualLayoutTest {
         val originalWidgetIdentity = requireNotNull(compose.runOnIdle { harness.widgetProbe.identity })
 
         val path = beginDrag(harness, firstRatio = 0.4f)
-        assertPhysicalSplit(0.4f, ClockSide.RIGHT)
+        assertPhysicalSplit(0.4f, ClockSide.LEFT)
         assertCounters(clock = 1, widgets = 2)
         root().performTouchInput { moveTo(path.positionFor(0.6f)) }
         assertPhysicalSplit(0.6f, ClockSide.LEFT)
@@ -207,7 +207,7 @@ class ResizableDualLayoutTest {
         // The invisible, widget-side portion of the 48dp target must still resize the split.
         beginDrag(harness, firstRatio = 0.4f, widgetSideOfHitZone = true)
         assertRatio(harness, 0.4f)
-        assertPhysicalSplit(0.4f, ClockSide.RIGHT)
+        assertPhysicalSplit(0.4f, ClockSide.LEFT)
         root().performTouchInput { up() }
         compose.runOnIdle {
             assertEquals(1, harness.pager.currentPage)
@@ -235,7 +235,7 @@ class ResizableDualLayoutTest {
 
     @Test
     fun releaseSnapsThirtyRegionWithoutSnappingDuringTheDrag() {
-        assertReleaseSnap(0.33f, ClockSide.RIGHT, 0.3f)
+        assertReleaseSnap(0.33f, ClockSide.LEFT, 0.3f)
     }
 
     @Test

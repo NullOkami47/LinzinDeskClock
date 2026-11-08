@@ -12,7 +12,6 @@
     <string name="media_unavailable">暂时无法获取媒体会话</string>
     <string name="media_no_session">当前没有媒体会话</string>
     <string name="media_no_session_hint">在媒体应用开始播放，即可在此显示。</string>
-    <string name="media_hidden">锁定时隐藏媒体信息</string>
     <string name="media_starting">媒体</string>
     <string name="media_no_artwork">无专辑封面</string>
     <string name="media_unknown_title">未知曲目</string>

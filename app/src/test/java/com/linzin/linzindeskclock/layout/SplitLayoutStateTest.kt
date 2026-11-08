@@ -1,16 +1,19 @@
 package com.linzin.linzindeskclock.layout
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 class SplitLayoutStateTest {
     @Test
-    fun `finite ratios clamp at both limits and choose the larger clock panel`() {
-        assertState(0.2f, ClockSide.RIGHT, SplitLayoutState(-2f))
-        assertState(0.8f, ClockSide.LEFT, SplitLayoutState(2f, ClockSide.RIGHT))
-        assertState(0.2f, ClockSide.RIGHT, SplitLayoutState(0.2f))
-        assertState(0.8f, ClockSide.LEFT, SplitLayoutState(0.8f))
+    fun `finite ratios clamp at both limits and preserve the requested clock side`() {
+        for (side in ClockSide.entries) {
+            assertState(0.2f, side, SplitLayoutState(-2f, side))
+            assertState(0.8f, side, SplitLayoutState(2f, side))
+            assertState(0.2f, side, SplitLayoutState(0.2f, side))
+            assertState(0.8f, side, SplitLayoutState(0.8f, side))
+        }
     }
 
     @Test
@@ -22,21 +25,25 @@ class SplitLayoutStateTest {
     }
 
     @Test
-    fun `clock always follows the larger physical panel except at the centre`() {
-        assertState(0.49f, ClockSide.RIGHT, SplitLayoutState(0.49f, ClockSide.LEFT))
-        assertState(0.51f, ClockSide.LEFT, SplitLayoutState(0.51f, ClockSide.RIGHT))
-        assertState(0.5f, ClockSide.LEFT, SplitLayoutState(0.5f, ClockSide.LEFT))
-        assertState(0.5f, ClockSide.RIGHT, SplitLayoutState(0.5f, ClockSide.RIGHT))
+    fun `construction preserves the requested clock side even on the smaller panel`() {
+        for (side in ClockSide.entries) {
+            for (ratio in listOf(0.3f, 0.49f, 0.5f, 0.51f, 0.7f)) {
+                assertState(ratio, side, SplitLayoutState(ratio, side))
+            }
+        }
     }
 
     @Test
     fun `continuous drag preserves every ratio in the snap region until release`() {
-        var state = SplitLayoutState(0.6f)
-        for (target in listOf(0.55f, 0.53f, 0.51f, 0.5f, 0.49f, 0.47f, 0.45f)) {
-            state = state.withRatio(target)
-            assertEquals(target, state.ratio, 0f)
+        for (side in ClockSide.entries) {
+            var state = SplitLayoutState(0.6f, side)
+            for (target in listOf(0.55f, 0.53f, 0.51f, 0.5f, 0.49f, 0.47f, 0.45f)) {
+                state = state.withRatio(target)
+                assertEquals(target, state.ratio, 0f)
+                assertEquals(side, state.clockSide)
+            }
+            assertState(0.5f, side, state.release())
         }
-        assertState(0.5f, ClockSide.RIGHT, state.release())
     }
 
     @Test
@@ -52,10 +59,12 @@ class SplitLayoutStateTest {
 
     @Test
     fun `drag clamps and immediately moves away from an endpoint on reversal`() {
-        val clamped = SplitLayoutState(0.7f).dragBy(1000f, 1000f)
-        assertState(0.8f, ClockSide.LEFT, clamped)
-        assertState(0.79f, ClockSide.LEFT, clamped.dragBy(-10f, 1000f))
-        assertState(0.2f, ClockSide.RIGHT, clamped.dragBy(-1000f, 1000f))
+        for (side in ClockSide.entries) {
+            val clamped = SplitLayoutState(0.7f, side).dragBy(1000f, 1000f)
+            assertState(0.8f, side, clamped)
+            assertState(0.79f, side, clamped.dragBy(-10f, 1000f))
+            assertState(0.2f, side, clamped.dragBy(-1000f, 1000f))
+        }
     }
 
     @Test
@@ -72,13 +81,16 @@ class SplitLayoutStateTest {
 
     @Test
     fun `finite delta overflow still clamps at the correct endpoint`() {
-        assertState(0.8f, ClockSide.LEFT, SplitLayoutState().dragBy(Float.MAX_VALUE, Float.MIN_VALUE))
-        assertState(0.2f, ClockSide.RIGHT, SplitLayoutState().dragBy(-Float.MAX_VALUE, Float.MIN_VALUE))
+        for (side in ClockSide.entries) {
+            val state = SplitLayoutState(0.5f, side)
+            assertState(0.8f, side, state.dragBy(Float.MAX_VALUE, Float.MIN_VALUE))
+            assertState(0.2f, side, state.dragBy(-Float.MAX_VALUE, Float.MIN_VALUE))
+        }
     }
 
     @Test
     fun `release snaps inclusively at both exact boundaries`() {
-        assertState(0.5f, ClockSide.RIGHT, SplitLayoutState(0.45f).release())
+        assertState(0.5f, ClockSide.LEFT, SplitLayoutState(0.45f).release())
         assertState(0.5f, ClockSide.LEFT, SplitLayoutState(0.55f).release())
     }
 
@@ -86,23 +98,25 @@ class SplitLayoutStateTest {
     fun `release does not snap values immediately outside the boundaries`() {
         val below = java.lang.Math.nextDown(0.45f)
         val above = java.lang.Math.nextUp(0.55f)
-        assertState(below, ClockSide.RIGHT, SplitLayoutState(below).release())
+        assertState(below, ClockSide.LEFT, SplitLayoutState(below).release())
         assertState(above, ClockSide.LEFT, SplitLayoutState(above).release())
     }
 
     @Test
-    fun `arriving at centre retains the side from the most recent non-centre position`() {
-        assertState(0.5f, ClockSide.LEFT, SplitLayoutState(0.6f).withRatio(0.5f))
-        assertState(0.5f, ClockSide.RIGHT, SplitLayoutState(0.4f).withRatio(0.5f))
-        val crossed = SplitLayoutState(0.6f).withRatio(0.49f).withRatio(0.5f)
-        assertState(0.5f, ClockSide.RIGHT, crossed.release())
-        val returned = crossed.withRatio(0.51f).withRatio(0.5f)
-        assertState(0.5f, ClockSide.LEFT, returned.release())
+    fun `crossing and returning to centre always retains the chosen side`() {
+        for (side in ClockSide.entries) {
+            assertState(0.5f, side, SplitLayoutState(0.6f, side).withRatio(0.5f))
+            assertState(0.5f, side, SplitLayoutState(0.4f, side).withRatio(0.5f))
+            val crossed = SplitLayoutState(0.6f, side).withRatio(0.49f).withRatio(0.5f)
+            assertState(0.5f, side, crossed.release())
+            val returned = crossed.withRatio(0.51f).withRatio(0.5f)
+            assertState(0.5f, side, returned.release())
+        }
     }
 
     @Test
     fun `repeated release retains a centred right clock`() {
-        val state = SplitLayoutState(0.48f).release()
+        val state = SplitLayoutState(0.48f, ClockSide.RIGHT).release()
         assertState(0.5f, ClockSide.RIGHT, state.release().release())
     }
 
@@ -118,9 +132,10 @@ class SplitLayoutStateTest {
     @Test
     fun `normalised values have structural equality for hoisted Compose state`() {
         val first = SplitLayoutState(10f, ClockSide.RIGHT)
-        val second = SplitLayoutState(0.8f, ClockSide.LEFT)
+        val second = SplitLayoutState(0.8f, ClockSide.RIGHT)
         assertEquals(first, second)
         assertEquals(first.hashCode(), second.hashCode())
+        assertNotEquals(first, SplitLayoutState(0.8f, ClockSide.LEFT))
     }
 
     @Test
@@ -133,7 +148,7 @@ class SplitLayoutStateTest {
             for (sample in samples) {
                 for (previousSide in ClockSide.entries) {
                     val state = SplitLayoutState(sample, previousSide)
-                    assertState(target, state.clockSide, state.release())
+                    assertState(target, previousSide, state.release())
                     assertEquals(sample, state.ratio, 0f)
                 }
             }
@@ -156,12 +171,57 @@ class SplitLayoutStateTest {
 
     @Test
     fun `dragging through thirty fifty and seventy remains continuous`() {
-        var state = SplitLayoutState(0.8f)
-        for (target in listOf(0.75f, 0.69f, 0.65f, 0.55f, 0.51f, 0.49f, 0.45f, 0.35f, 0.29f, 0.25f)) {
-            state = state.dragBy((target - state.ratio) * 1000f, 1000f)
-            assertEquals(target, state.ratio, 0.000001f)
+        for (side in ClockSide.entries) {
+            var state = SplitLayoutState(0.8f, side)
+            for (target in listOf(0.75f, 0.69f, 0.65f, 0.55f, 0.51f, 0.49f, 0.45f, 0.35f, 0.29f, 0.25f)) {
+                state = state.dragBy((target - state.ratio) * 1000f, 1000f)
+                assertEquals(target, state.ratio, 0.000001f)
+                assertEquals(side, state.clockSide)
+            }
         }
     }
+
+    @Test
+    fun `default state remains a left clock in the seventy thirty layout`() {
+        assertState(0.7f, ClockSide.LEFT, SplitLayoutState())
+    }
+
+    @Test
+    fun `explicit side changes preserve the exact ratio and the original state`() {
+        for (ratio in listOf(0.2f, 0.3f, 0.47f, 0.5f, 0.7f, 0.8f)) {
+            for (originalSide in ClockSide.entries) {
+                val original = SplitLayoutState(ratio, originalSide)
+                for (requestedSide in ClockSide.entries) {
+                    val changed = original.withClockSide(requestedSide)
+                    assertState(ratio, requestedSide, changed)
+                    assertEquals(ratio, changed.ratio, 0f)
+                    assertState(ratio, originalSide, original)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `drag and release preserve each explicit choice across opposite panel sizes`() {
+        val right = SplitLayoutState().withClockSide(ClockSide.RIGHT)
+        assertState(0.7f, ClockSide.RIGHT, right)
+        val draggedRight = right.dragBy(-400f, 1000f).release()
+        assertState(0.3f, ClockSide.RIGHT, draggedRight)
+        val left = draggedRight.withClockSide(ClockSide.LEFT)
+        assertState(0.3f, ClockSide.LEFT, left)
+        assertState(0.7f, ClockSide.LEFT, left.dragBy(400f, 1000f).release())
+    }
+
+    @Test
+    fun `ratio updates clamp without changing either chosen side`() {
+        for (side in ClockSide.entries) {
+            val state = SplitLayoutState(0.5f, side)
+            assertState(0.2f, side, state.withRatio(-1f))
+            assertState(0.8f, side, state.withRatio(1f))
+            assertState(0.5f, side, state)
+        }
+    }
+
     private fun assertState(ratio: Float, side: ClockSide, actual: SplitLayoutState) {
         assertEquals(ratio, actual.ratio, 0.000001f)
         assertEquals(side, actual.clockSide)

@@ -141,7 +141,7 @@ class MediaWidgetPresentationTest {
 
     @Test fun keyguardReplacesPermissionActionWithUnlockHint() {
         val locked = mutableStateOf(false)
-        show(MediaWidgetState(MediaAccess.NOT_GRANTED), locked = locked, hideWhenLocked = true)
+        show(MediaWidgetState(MediaAccess.NOT_GRANTED), locked = locked)
         compose.runOnIdle { locked.value = true }
         compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
@@ -164,7 +164,7 @@ class MediaWidgetPresentationTest {
         val widget = bounds("media_widget")
         val art = bounds("media_artwork")
         val glass = bounds("media_glass_panel")
-        assertTrue("Artwork owns about the upper 70%", art.height / widget.height in 0.65f..0.75f)
+        assertTrue("Artwork keeps 60–70% of the viewport", art.height / widget.height in 0.60f..0.70f)
         assertEquals("The control panel does not obscure the fitted cover", art.bottom, glass.top, 1f)
         assertEquals(widget.bottom, glass.bottom, 1f)
         assertEquals(glass.center.x, bounds("media_title").center.x, 1f)
@@ -226,28 +226,40 @@ class MediaWidgetPresentationTest {
         capture("narrow-large-text")
     }
 
-    @Test fun shortWidePanelKeepsWholeCoverBesideGlass() {
-        show(fixture(), width = 360, height = 220)
-        val art = bounds("media_artwork")
-        val glass = bounds("media_glass_panel")
-        assertEquals("Landscape reserves an independent artwork area", art.right, glass.left, 1f)
-        assertEquals(art.top, glass.top, 1f)
-        assertEquals(art.bottom, glass.bottom, 1f)
+    @Test fun shortWidePanelKeepsControlsInTheBottomThirtyToFortyPercent() {
+        show(fixture(),width=360,height=220)
+        val widget=bounds("media_widget");val art=bounds("media_artwork");val glass=bounds("media_glass_panel")
+        assertEquals(art.bottom,glass.top,1f)
+        assertEquals(widget.bottom,glass.bottom,1f)
+        assertTrue(glass.height/widget.height in .30f..0.40f)
         compose.onNodeWithTag("media_play_pause").performScrollTo().assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals(listOf(MediaCommand.PAUSE), commands) }
-        capture("landscape-artwork-glass") { bitmap -> assertWholeCover(bitmap, art) }
+        compose.runOnIdle { assertEquals(listOf(MediaCommand.PAUSE),commands) }
+        capture("landscape-artwork-glass") { bitmap -> assertWholeCover(bitmap,art) }
     }
 
-    @Test fun privacyRemovesMetadataAndBothArtworkLayersWithoutOutgoingFade() {
-        val locked = mutableStateOf(false)
-        show(fixture(), locked = locked, hideWhenLocked = true)
-        compose.runOnIdle { locked.value = true }
+    @Test fun lockingRetainsArtworkMetadataProgressAndWorkingControls() {
+        val locked=mutableStateOf(false)
+        // A pre-update setting must no longer hide the player on lock.
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        context.getSharedPreferences("desk_clock_prefs",Context.MODE_PRIVATE).edit().putBoolean("auto_hide_media",true).commit()
+        show(fixture(),locked=locked)
+        compose.runOnIdle { locked.value=true }
         compose.waitForIdle()
-        compose.onNodeWithTag("media_artwork").assertDoesNotExist()
-        compose.onNodeWithTag("media_glass_panel").assertDoesNotExist()
-        compose.onNodeWithText("唯有追趕風的方向").assertDoesNotExist()
-        compose.onNodeWithText("鎖定時隱藏媒體資訊").assertIsDisplayed()
-        capture("privacy-hidden")
+        compose.onNodeWithTag("media_artwork").assertIsDisplayed()
+        compose.onNodeWithTag("media_glass_panel").assertIsDisplayed()
+        compose.onNodeWithText("唯有追趕風的方向").assertIsDisplayed()
+        compose.onNodeWithText("知更鳥 / HOYO-MiX / Chevy").assertIsDisplayed()
+        compose.onNodeWithText("0:30").assertIsDisplayed()
+        compose.onNodeWithText("2:03").assertIsDisplayed()
+        compose.onNodeWithTag("media_previous").performClick()
+        compose.onNodeWithTag("media_play_pause").performClick()
+        compose.onNodeWithTag("media_next").performClick()
+        compose.onNodeWithTag("media_seek").performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(.5f)) }
+        compose.runOnIdle {
+            assertEquals(listOf(MediaCommand.PREVIOUS,MediaCommand.PAUSE,MediaCommand.NEXT,MediaCommand.SEEK),commands)
+            assertEquals(61_500L,seekPositions.last())
+        }
+        capture("locked-full-player")
     }
 
     @Test fun uiLockedPlaybackRetainsArtButDisablesTransport() {
@@ -277,7 +289,6 @@ class MediaWidgetPresentationTest {
         width: Int = 320,
         height: Int = 560,
         locked: MutableState<Boolean> = mutableStateOf(false),
-        hideWhenLocked: Boolean = false,
         controlsEnabled: Boolean = true,
         fontScale: Float = 1f,
         settingsAction: ((Context) -> Unit)? = null,
@@ -295,7 +306,7 @@ class MediaWidgetPresentationTest {
                 LocalDensity provides Density(density, fontScale)) {
                 MaterialTheme(colorScheme = DeskClockColorScheme) {
                     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black), contentAlignment = Alignment.Center) {
-                        MediaWidgetContent(state, isLocked = locked.value, hideWhenLocked = hideWhenLocked,
+                        MediaWidgetContent(state, isLocked = locked.value,
                             controlsEnabled = controlsEnabled, onOpenNotificationAccess = { settingsClicks++; settingsAction?.invoke(context) },
                             onCommand = { command, position -> commands += command; seekPositions += position },
                             modifier = Modifier.size(width.dp, height.dp).onGloballyPositioned {

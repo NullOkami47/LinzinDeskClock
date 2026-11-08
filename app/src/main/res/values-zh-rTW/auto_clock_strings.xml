@@ -16,7 +16,6 @@
     <string name="auto_media_granted">媒體通知存取已啟用。</string>
     <string name="auto_media_missing">啟用通知存取以控制正在使用的媒體工作階段。</string>
     <string name="auto_media_setup">設定媒體通知存取</string>
-    <string name="auto_media_privacy">鎖定畫面隱藏媒體資訊與封面</string>
     <string name="auto_dream_setup">設定系統螢幕保護程式</string>
     <string name="auto_dream_description">請在系統螢幕保護程式選擇 Linzin Desk Clock。支援的裝置會在充電或底座模式啟動，仍會檢查姿勢與充電條件。可按右上角按鈕或從底部邊緣向上長滑退出。</string>
     <string name="auto_platform_limit">需要先完成一次設定。啟用後，事件監看會在關閉工作時繼續，並於重新開機後恢復；只有新的鎖定事件才會開始有限時偵測。部分廠商還需要在 App 設定允許背景活動或自動啟動。強制停止後須重新開啟 App 才能恢復。時鐘不會解除系統安全鎖定。</string>
@@ -47,4 +46,5 @@
     <string name="auto_cancel">取消</string>
     <string name="auto_done">完成</string>
     <string name="auto_setup">設定自動桌面時鐘</string>
+    <string name="auto_media_lock_controls">鎖定畫面會完整顯示曲名、封面與進度，並可操作播放控制；UI Lock 仍會防止誤觸。</string>
 </resources>

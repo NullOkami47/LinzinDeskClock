@@ -21,8 +21,8 @@
     <string name="layout_tip_title">探索多種螢幕版面</string>
     <string name="layout_tip_desc">除了全螢幕時鐘外，你隨時可以在「設定」中切換成雙區塊版面，一邊看時鐘、一邊同步掌握迷你月曆與即時天氣！</string>
     <string name="layout_tip_single">單一區塊</string>
-    <string name="layout_tip_dual_left">雙區塊 (左大右小)</string>
-    <string name="layout_tip_dual_right">雙區塊 (右大左小)</string>
+    <string name="layout_tip_dual_left">雙區塊（時鐘在左）</string>
+    <string name="layout_tip_dual_right">雙區塊（時鐘在右）</string>
 
     <!-- 非摺疊裝置彩蛋與提示 -->
     <string name="btn_not_foldable">不是大摺疊機？</string>
@@ -42,8 +42,8 @@
     <string name="settings_title">時鐘設定</string>
     <string name="layout_section_title">螢幕區塊版面</string>
     <string name="layout_single">單區塊模式 (100% 全螢幕)</string>
-    <string name="layout_dual_left">雙區塊（時鐘在左，可拖曳分隔線）</string>
-    <string name="layout_dual_right">雙區塊（時鐘在右，可拖曳分隔線）</string>
+    <string name="layout_dual_left">雙區塊（時鐘固定在左，可拖曳調整大小）</string>
+    <string name="layout_dual_right">雙區塊（時鐘固定在右，可拖曳調整大小）</string>
 
     <!-- 設定對話框：天氣資訊設定 -->
     <string name="pref_weather_title">啟用當地天氣資訊</string>
@@ -96,7 +96,7 @@
     <string name="layout_switch_dialog_title">建議開啟雙區塊版面</string>
     <string name="layout_switch_dialog_desc">您目前處於「單一全螢幕」時鐘模式，天氣與行事曆資訊需在「雙區塊」模式下才會顯示於側邊小區塊。\n\n是否要同步切換為雙區塊版面？</string>
     <string name="layout_switch_opt_no">否，維持單一區塊</string>
-    <string name="layout_switch_opt_left">是（左大右小）</string>
-    <string name="layout_switch_opt_right">是（右大左小）</string>
+    <string name="layout_switch_opt_left">切換（時鐘在左）</string>
+    <string name="layout_switch_opt_right">切換（時鐘在右）</string>
 
 </resources>

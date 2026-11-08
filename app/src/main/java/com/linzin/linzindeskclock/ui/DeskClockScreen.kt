@@ -1,5 +1,12 @@
 package com.linzin.linzindeskclock.ui
 
+import com.linzin.linzindeskclock.calendar.UpcomingCalendarEvent
+import com.linzin.linzindeskclock.calendar.fetchUpcomingCalendarEvents
+import com.linzin.linzindeskclock.power.LowBatteryAction
+import com.linzin.linzindeskclock.power.LowBatteryPolicy
+import com.linzin.linzindeskclock.power.LowBatteryPreferences
+import com.linzin.linzindeskclock.service.AutoClockService
+import android.content.Intent
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -32,6 +39,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +67,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.linzin.linzindeskclock.autostart.ClockEntryMode
-import com.linzin.linzindeskclock.settings.AutoClockPreferences
 import com.linzin.linzindeskclock.ui.ClockExitOverlay
 import com.linzin.linzindeskclock.ui.ResizableDualLayout
 import com.linzin.linzindeskclock.layout.ClockSide
@@ -75,26 +83,18 @@ fun DeskClockScreen(
     modifier: Modifier = Modifier,
     entryMode: ClockEntryMode = ClockEntryMode.MANUAL,
     windowOverride: Window? = null,
-    onExit: () -> Unit = {}
+    onExit: () -> Unit = {},
+    onLowBatteryExit: () -> Unit = onExit
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
     val window = windowOverride ?: activity?.window
     val session = entryMode == ClockEntryMode.LOCK_SCREEN || entryMode == ClockEntryMode.DREAM
-    val clockContentModifier = Modifier.fillMaxSize().padding(bottom = if(session) 32.dp else 0.dp)
+    val clockContentModifier = Modifier.fillMaxSize().padding(bottom = if(session) 12.dp else 0.dp)
     val allowSettings = !session
     val uiLockDescription = stringResource(R.string.auto_ui_lock)
     val settingsDescription = stringResource(R.string.settings_title)
     val keyguard = remember { context.getSystemService(android.app.KeyguardManager::class.java) }
-    val autoPreferences = remember { AutoClockPreferences(context) }
-    var hideMediaWhenLocked by remember { mutableStateOf(autoPreferences.hideMediaWhenLocked) }
-    DisposableEffect(autoPreferences) {
-        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,_ ->
-            hideMediaWhenLocked = autoPreferences.hideMediaWhenLocked
-        }
-        autoPreferences.preferences.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { autoPreferences.preferences.unregisterOnSharedPreferenceChangeListener(listener) }
-    }
     DisposableEffect(window) {
         val oldBrightness = window?.attributes?.screenBrightness
         val oldKeepScreen = (window?.attributes?.flags ?: 0) and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
@@ -141,7 +141,7 @@ fun DeskClockScreen(
         if (mode != ClockLayoutMode.SINGLE) {
             val requestedSide = if (mode == ClockLayoutMode.DUAL_LEFT_LARGE) ClockSide.LEFT else ClockSide.RIGHT
             if (splitState.clockSide != requestedSide) {
-                splitState = SplitLayoutState(1f - splitState.ratio, requestedSide)
+                splitState = splitState.withClockSide(requestedSide)
                 SplitLayoutPreferences.save(prefs, splitState)
             }
         }
@@ -191,6 +191,28 @@ fun DeskClockScreen(
     var isFakeSleeping by remember { mutableStateOf(false) }
 
     val batteryState = rememberBatteryState()
+    val batteryPrefs=remember { LowBatteryPreferences(context) }
+    var lowBatteryAction by remember { mutableStateOf(batteryPrefs.action) }
+    var lowBatteryThreshold by remember { mutableIntStateOf(batteryPrefs.threshold) }
+    DisposableEffect(batteryPrefs) {
+        val listener=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,key ->
+            if(key=="low_battery_action" || key=="low_battery_threshold") {
+                lowBatteryAction=batteryPrefs.action;lowBatteryThreshold=batteryPrefs.threshold
+            }
+        }
+        batteryPrefs.storage.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { batteryPrefs.storage.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    val batteryAction=LowBatteryPolicy.action(batteryState.level,batteryState.isPowered || batteryState.isCharging,lowBatteryThreshold,lowBatteryAction)
+    val lowBatteryExit by rememberUpdatedState(onLowBatteryExit)
+    LaunchedEffect(batteryAction) {
+        if(batteryAction==LowBatteryAction.EXIT) {
+            context.stopService(Intent(context,AutoClockService::class.java))
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            lowBatteryExit()
+        }
+    }
+
 
     val actualMainPageCount = 3
     val actualSidePageCount = 3
@@ -283,7 +305,7 @@ fun DeskClockScreen(
 
             if (hasCalPerm) {
                 while (true) {
-                    calendarEventsList = fetchUpcomingCalendarEvents(context)
+                    calendarEventsList = withContext(Dispatchers.IO) { fetchUpcomingCalendarEvents(context) }
                     delay(10 * 60 * 1000L)
                 }
             } else {
@@ -298,14 +320,16 @@ fun DeskClockScreen(
 
     SystemBarsController(hideSystemBars = true)
 
-    LaunchedEffect(manualBrightness, brightnessValue, isFakeSleeping) {
+    LaunchedEffect(manualBrightness, brightnessValue, isFakeSleeping, batteryAction) {
         window?.let { w ->
             val layoutParams = w.attributes
-            layoutParams.screenBrightness = when {
+            val requested = when {
                 isFakeSleeping -> 0.0f
-                manualBrightness -> brightnessValue.coerceIn(0.01f, 1f)
+                manualBrightness -> brightnessValue.coerceIn(0.01f,1f)
                 else -> WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
+            val systemBrightness=runCatching { Settings.System.getInt(context.contentResolver,Settings.System.SCREEN_BRIGHTNESS,128)/255f }.getOrDefault(.5f)
+            layoutParams.screenBrightness=if(isFakeSleeping) 0f else LowBatteryPolicy.brightness(requested,systemBrightness,batteryAction)
             w.attributes = layoutParams
         }
     }
@@ -400,7 +424,7 @@ fun DeskClockScreen(
                     },
                     isUiLocked = isUiLocked,
                     clock = {
-                        Box(Modifier.fillMaxSize().padding(horizontal=4.dp).clip(RoundedCornerShape(24.dp))) {
+                        Box(Modifier.fillMaxSize().padding(horizontal=4.dp).clip(RoundedCornerShape(24.dp)).testTag("clock_panel")) {
                             MainClockSection(
                                 state = mainPagerState, foldState = foldState, is24Hour = is24Hour,
                                 showCornerDate = showCornerDate, showHingeAngle = showHingeAngle,
@@ -410,13 +434,13 @@ fun DeskClockScreen(
                         }
                     },
                     widgets = {
-                        Box(Modifier.fillMaxSize().padding(horizontal=4.dp).clip(RoundedCornerShape(24.dp))) {
+                        Box(Modifier.fillMaxSize().padding(horizontal=4.dp).clip(RoundedCornerShape(24.dp)).testTag("widget_panel")) {
                             SideWidgetPager(
                                 state = sidePagerState, weatherEnabled = weatherEnabled, weatherInfo = weatherInfo,
                                 isFahrenheit = isFahrenheit, isUiLocked = isUiLocked,
                                 calendarEvents = if (session) emptyList() else calendarEventsList,
                                 isLocked = session || keyguard.isKeyguardLocked,
-                                hideMediaWhenLocked = hideMediaWhenLocked, modifier = Modifier.fillMaxSize()
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }

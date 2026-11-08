@@ -1,5 +1,15 @@
 # Self-hosted validation handoff
 
+## Current authorised run preparation (2026-11-08)
+
+The user now explicitly requests self-hosted CI on this PC. A one-job Windows runner `linzin-v2-qa-20261108-222854` has been registered for `NullOkami47/LinzinDeskClock` and confirmed online. The prior registration rejection recorded below is historical; this new authorised registration succeeded.
+
+The existing `Android build` workflow exposes a manual `executionTarget=self-hosted` input and calls the guarded Windows reusable workflow. Normal hosted defaults remain unchanged. Only `feat/desk-clock-v2`, the expected repository and authenticated owner may enter the Windows job. The upcoming source includes 2.0.2 and the user's later explicit clock-side choice refinement (2.0.3).
+
+The job uses the isolated D: runner checkout, private ADB 5038 and `emulator-5580`. The physical phone is not a CI target. Results must be tied to the dispatched SHA, GitHub job runner ID/name and this PC's runner process. Final result pending; historical results below do not establish the new run's outcome.
+
+## Historical preparation
+
 Status: 2026-11-08, Asia/Hong_Kong. The workflow and validation script are prepared; no self-hosted runner is registered or online, and no self-hosted job has executed.
 
 ## Trigger and execution boundary

@@ -12,10 +12,10 @@ object SplitLayoutPreferences {
      * Restore and, if needed, persist a migrated/repaired pair. A single snapshot avoids mixing
      * values from different edits and avoids typed-getter ClassCastExceptions on corrupt data.
      *
-     * Valid new settings override the legacy mode. A missing/invalid ratio falls back to 70/30
-     * for the valid saved side, or the legacy side if unavailable. Finite out-of-range values
-     * are clamped. A valid ratio decides which side is larger; only a 50/50 tie uses the saved
-     * (then legacy) side. Neither restore nor save applies the release snap.
+     * A valid saved side is honoured regardless of ratio; a missing/invalid side inherits the
+     * legacy mode (LEFT by default). A missing ratio migrates the legacy proportion, while an
+     * invalid ratio falls back to 70/30 for the resolved side. Finite out-of-range values are
+     * clamped. Neither restore nor save applies the release snap or changes the resolved side.
      *
      * This does not change pref_layout_mode or either parent's pager preference.
      */
@@ -27,7 +27,12 @@ object SplitLayoutPreferences {
             ClockSide.RIGHT.name -> ClockSide.RIGHT
             else -> legacy.clockSide
         }
-        val state = SplitLayoutState(values[RATIO_KEY] as? Float ?: Float.NaN, side)
+        val ratio = if (values.containsKey(RATIO_KEY)) {
+            values[RATIO_KEY] as? Float ?: Float.NaN
+        } else {
+            legacy.ratio
+        }
+        val state = SplitLayoutState(ratio, side)
         if (values[RATIO_KEY] != state.ratio || values[CLOCK_SIDE_KEY] != state.clockSide.name) {
             save(preferences, state)
         }

@@ -39,7 +39,7 @@ fun ClockExitOverlay(onExit: () -> Unit, modifier: Modifier = Modifier) {
                 drawLine(Color.LightGray,Offset(size.width-2,2f),Offset(2f,size.height-2),2.dp.toPx(),StrokeCap.Round)
             }
         }
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(32.dp).testTag("clock_exit_edge")
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(12.dp).testTag("clock_exit_edge")
             .semantics { contentDescription = label; onClick { exit(); true } }
             .pointerInput(Unit) {
                 val threshold = 80.dp.toPx()
@@ -61,7 +61,9 @@ fun ClockExitOverlay(onExit: () -> Unit, modifier: Modifier = Modifier) {
                     if(valid && dy >= threshold && dy > dx * 1.5f) exit()
                 }
             },contentAlignment = Alignment.BottomCenter) {
-            Box(Modifier.padding(bottom=8.dp).width(44.dp).height(3.dp).background(Color.LightGray.copy(alpha=.6f),RoundedCornerShape(2.dp)))
+            Box(Modifier.padding(bottom=4.dp)) {
+                Box(Modifier.width(36.dp).height(2.dp).testTag("clock_exit_handle").background(Color.LightGray.copy(alpha=.6f),RoundedCornerShape(2.dp)))
+            }
         }
     }
 }

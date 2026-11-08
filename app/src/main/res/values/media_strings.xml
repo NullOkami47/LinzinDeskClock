@@ -12,7 +12,6 @@
     <string name="media_unavailable">Media sessions are temporarily unavailable</string>
     <string name="media_no_session">No active media session</string>
     <string name="media_no_session_hint">Start playback in a media app to show it here.</string>
-    <string name="media_hidden">Media details are hidden while locked</string>
     <string name="media_starting">Media</string>
     <string name="media_no_artwork">No artwork</string>
     <string name="media_unknown_title">Unknown title</string>

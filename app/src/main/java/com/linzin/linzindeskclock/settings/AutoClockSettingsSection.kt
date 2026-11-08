@@ -46,7 +46,6 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
     var enabled by remember { mutableStateOf(settings.enabled) }
     var automatic by remember { mutableStateOf(settings.automaticLaunch) }
     var charging by remember { mutableStateOf(settings.chargingMode) }
-    var hideMedia by remember { mutableStateOf(settings.hideMediaWhenLocked) }
     var revision by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(AutoClockService.running) }
     var startFailed by remember { mutableStateOf(false) }
@@ -137,10 +136,7 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
         }
         Text(stringResource(if(notificationAccess) R.string.auto_media_granted else R.string.auto_media_missing),fontSize=13.sp)
         TextButton(onClick={ if(!MediaNotificationAccess.openSettings(context)) showUnavailable(context) }) { Text(stringResource(R.string.auto_media_setup)) }
-        Row(verticalAlignment=Alignment.CenterVertically) {
-            Text(stringResource(R.string.auto_media_privacy),Modifier.weight(1f))
-            Switch(checked=hideMedia,onCheckedChange={ hideMedia=it; settings.hideMediaWhenLocked=it })
-        }
+        Text(stringResource(R.string.auto_media_lock_controls),fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick={ openSetup(context,Intent(Settings.ACTION_DREAM_SETTINGS)) }) { Text(stringResource(R.string.auto_dream_setup)) }
         Text(stringResource(R.string.auto_dream_description),fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick={ openSetup(context,Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+context.packageName))) }) {

@@ -66,7 +66,7 @@ private const val AccessibleRatioStep = 0.05f
  * lets small accessibility increments move away from 50/50 instead of being trapped by snapping.
  *
  * Clock and widgets have permanent, separate composition slots. Only their measured widths and
- * physical positions change, so remember/rememberSaveable/effects survive crossing the centre.
+ * physical positions change only when the user chooses a side; remember/rememberSaveable/effects survive resizing and explicit swaps.
  * Keep both PagerStates in the parent and pass the appropriate one through each content lambda.
  * This composable never creates a pager or reads/writes preferences.
  */

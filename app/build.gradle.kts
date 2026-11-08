@@ -14,8 +14,8 @@ android {
         applicationId = "com.linzin.linzindeskclock"
         minSdk = 31
         targetSdk = 37
-        versionCode = 3
-        versionName = "2.0.1"
+        versionCode = 5
+        versionName = "2.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

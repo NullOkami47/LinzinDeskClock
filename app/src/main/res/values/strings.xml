@@ -20,8 +20,8 @@
     <string name="layout_tip_title">More Layout Options</string>
     <string name="layout_tip_desc">Looking for more information? You can switch to split layouts (Clock + Calendar / Weather) anytime in the Settings menu!</string>
     <string name="layout_tip_single">Full Screen</string>
-    <string name="layout_tip_dual_left">Split (Left Large)</string>
-    <string name="layout_tip_dual_right">Split (Right Large)</string>
+    <string name="layout_tip_dual_left">Split (Clock Left)</string>
+    <string name="layout_tip_dual_right">Split (Clock Right)</string>
 
     <!-- Non-foldable Easter Egg & Dialog -->
     <string name="btn_not_foldable">Not a book-style foldable?</string>
@@ -41,8 +41,8 @@
     <string name="settings_title">Clock Settings</string>
     <string name="layout_section_title">Screen Layout</string>
     <string name="layout_single">Single Block (100% Fullscreen)</string>
-    <string name="layout_dual_left">Dual panel (clock on the left; drag the divider)</string>
-    <string name="layout_dual_right">Dual panel (clock on the right; drag the divider)</string>
+    <string name="layout_dual_left">Dual panel (clock stays left; drag to resize)</string>
+    <string name="layout_dual_right">Dual panel (clock stays right; drag to resize)</string>
 
     <!-- Settings Dialog: Weather Options -->
     <string name="pref_weather_title">Enable Local Weather</string>
@@ -98,7 +98,7 @@
     <string name="layout_switch_dialog_title">Switch to Split Layout?</string>
     <string name="layout_switch_dialog_desc">You are currently in \"Full Screen\" mode. Weather and calendar events are displayed in the side panel under \"Split Layout\" modes.\n\nWould you like to switch to a split layout now?</string>
     <string name="layout_switch_opt_no">No, keep single</string>
-    <string name="layout_switch_opt_left">Yes (Left Large)</string>
-    <string name="layout_switch_opt_right">Yes (Right Large)</string>
+    <string name="layout_switch_opt_left">Yes (Clock Left)</string>
+    <string name="layout_switch_opt_right">Yes (Clock Right)</string>
 
 </resources>

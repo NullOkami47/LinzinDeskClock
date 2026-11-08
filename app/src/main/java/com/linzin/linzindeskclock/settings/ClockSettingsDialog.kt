@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -139,6 +140,7 @@ fun ClockSettingsDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .testTag("layout_choice_${mode.name}")
                                 .clickable { onLayoutModeChange(mode) }
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -532,6 +534,7 @@ fun ClockSettingsDialog(
 
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
 
+                    LowBatterySettingsSection()
                     AutoClockSettingsSection(hasHingeSensor = hasHingeSensor)
 
                     // 9. 查看手勢操作指南

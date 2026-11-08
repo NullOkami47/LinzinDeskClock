@@ -74,9 +74,3 @@ data class PlaybackClock(
         return projected.coerceIn(0.0, maximum.toDouble()).toLong()
     }
 }
-
-/** Privacy hides content and controls; UI Lock only blocks controls. Keyguard alone is not a transport gate. */
-data class MediaPresentationPolicy(val hideContent: Boolean, val allowControls: Boolean)
-
-fun mediaPresentationPolicy(isLocked: Boolean, hideWhenLocked: Boolean, controlsEnabled: Boolean): MediaPresentationPolicy =
-    MediaPresentationPolicy(hideContent = isLocked && hideWhenLocked, allowControls = !(isLocked && hideWhenLocked) && controlsEnabled)

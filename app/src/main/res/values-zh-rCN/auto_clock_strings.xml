@@ -16,7 +16,6 @@
     <string name="auto_media_granted">媒体通知访问已启用。</string>
     <string name="auto_media_missing">启用通知访问以控制正在使用的媒体会话。</string>
     <string name="auto_media_setup">设置媒体通知访问</string>
-    <string name="auto_media_privacy">锁屏隐藏媒体信息与封面</string>
     <string name="auto_dream_setup">设置系统屏幕保护程序</string>
     <string name="auto_dream_description">请在系统屏幕保护程序中选择 Linzin Desk Clock。支持的设备会在充电或底座模式启动，仍会检查姿势和充电条件。可按右上角按钮或从底部边缘向上长滑退出。</string>
     <string name="auto_platform_limit">需要先完成一次设置。启用后，事件监测会在关闭任务时继续，并在重启后恢复；只有新的锁定事件才会开始限时检测。部分厂商还需要在 App 设置允许后台活动或自动启动。强制停止后须重新打开 App 才能恢复。时钟不会解除系统安全锁定。</string>
@@ -47,4 +46,5 @@
     <string name="auto_cancel">取消</string>
     <string name="auto_done">完成</string>
     <string name="auto_setup">设置自动桌面时钟</string>
+    <string name="auto_media_lock_controls">锁屏会完整显示曲名、封面与进度，并可操作播放控制；UI Lock 仍会防止误触。</string>
 </resources>

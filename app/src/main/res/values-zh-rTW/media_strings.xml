@@ -12,7 +12,6 @@
     <string name="media_unavailable">暫時無法取得媒體工作階段</string>
     <string name="media_no_session">目前沒有媒體工作階段</string>
     <string name="media_no_session_hint">在媒體 App 開始播放，即可在此顯示。</string>
-    <string name="media_hidden">鎖定時隱藏媒體資訊</string>
     <string name="media_starting">媒體</string>
     <string name="media_no_artwork">無專輯封面</string>
     <string name="media_unknown_title">未知曲目</string>

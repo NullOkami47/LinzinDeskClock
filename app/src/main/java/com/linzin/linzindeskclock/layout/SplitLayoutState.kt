@@ -7,12 +7,12 @@ enum class ClockSide { LEFT, RIGHT }
  * Immutable, Android/Compose-independent split state.
  *
  * [ratio] is the physical LEFT panel's fraction of the entire available width, not the clock's
- * fraction. The clock occupies the larger panel; at exactly 0.5, [clockSide] retains the previous
- * side. Construction clamps finite ratios to 0.2..0.8 and recovers non-finite ratios to 70/30
+ * fraction. [clockSide] is the user's chosen side, independent of either panel's size.
+ * Construction clamps finite ratios to 0.2..0.8 and recovers non-finite ratios to 70/30
  * for the supplied side. Construction and dragging never snap: only [release] does.
  *
- * Use [withRatio] or [dragBy] to retain the previous side while crossing the centre. All methods
- * return a new value without mutating this instance, so callers can hoist it in mutableStateOf.
+ * Resizing and release preserve [clockSide]; only [withClockSide] explicitly changes it.
+ * All methods leave this instance unchanged, so callers can hoist it in mutableStateOf.
  */
 class SplitLayoutState(
     ratio: Float = DEFAULT_RATIO,
@@ -24,15 +24,14 @@ class SplitLayoutState(
         if (clockSide == ClockSide.LEFT) DEFAULT_RATIO else LEGACY_RIGHT_RATIO
     }
 
-    val clockSide: ClockSide = when {
-        this.ratio > CENTRE_RATIO -> ClockSide.LEFT
-        this.ratio < CENTRE_RATIO -> ClockSide.RIGHT
-        else -> clockSide
-    }
+    val clockSide: ClockSide = clockSide
 
     /** Exact continuous update; invalid input is ignored rather than making a live drag jump. */
     fun withRatio(ratio: Float): SplitLayoutState =
         if (ratio.isFinite()) SplitLayoutState(ratio, clockSide) else this
+
+    /** Explicitly changes the clock's physical side without resizing either panel. */
+    fun withClockSide(side: ClockSide): SplitLayoutState = SplitLayoutState(ratio, side)
 
     /** Positive [deltaPx] moves the physical divider right, including in RTL layouts. */
     fun dragBy(deltaPx: Float, totalWidthPx: Float): SplitLayoutState {

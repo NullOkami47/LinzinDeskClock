@@ -1,0 +1,14 @@
+<resources>
+    <string name="calendar_event_details">Event details</string>
+    <string name="calendar_view_details">View event details</string>
+    <string name="calendar_start">Starts</string>
+    <string name="calendar_end">Ends</string>
+    <string name="calendar_location">Location</string>
+    <string name="calendar_description">Description</string>
+    <string name="calendar_name">Calendar</string>
+    <string name="calendar_open_in_app">Open in calendar</string>
+    <string name="calendar_close">Close</string>
+    <string name="calendar_unlock_to_view">Unlock your device to view this event.</string>
+    <string name="calendar_permission_required">Calendar permission is required to view this event.</string>
+    <string name="calendar_app_unavailable">No available calendar app can open this event.</string>
+</resources>

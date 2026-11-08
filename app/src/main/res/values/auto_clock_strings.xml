@@ -16,7 +16,6 @@
     <string name="auto_media_granted">Media notification access is enabled.</string>
     <string name="auto_media_missing">Enable notification access to control active media sessions.</string>
     <string name="auto_media_setup">Set up media notification access</string>
-    <string name="auto_media_privacy">Hide media details and artwork on the lock screen</string>
     <string name="auto_dream_setup">Configure system screen saver</string>
     <string name="auto_dream_description">Choose Linzin Desk Clock in the system screen-saver settings. On supported devices the system starts it while charging or docked; the same posture and charging checks apply. Exit with the top-right button or a long swipe up from the bottom edge.</string>
     <string name="auto_platform_limit">One-time setup is required. When enabled, the event monitor survives closing the task and resumes after reboot. Only a new lock starts a bounded scan. Some manufacturers additionally require allowing background activity or auto-start in app settings. Force-stop always stops monitoring until you reopen the app. The clock never dismisses system security.</string>
@@ -47,4 +46,5 @@
     <string name="auto_cancel">Cancel</string>
     <string name="auto_done">Done</string>
     <string name="auto_setup">Set up automatic desk clock</string>
+    <string name="auto_media_lock_controls">The lock-screen player shows title, artwork and progress, with playback controls. UI Lock still prevents accidental taps.</string>
 </resources>

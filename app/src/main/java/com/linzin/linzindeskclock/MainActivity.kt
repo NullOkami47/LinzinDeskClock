@@ -2,6 +2,8 @@ package com.linzin.linzindeskclock
 
 import com.linzin.linzindeskclock.ui.DeskClockScreen
 import com.linzin.linzindeskclock.settings.AutoClockSetupDialog
+import com.linzin.linzindeskclock.calendar.UpcomingCalendarEvent
+import com.linzin.linzindeskclock.ui.SideDateWidget
 import android.Manifest
 import android.app.KeyguardManager
 import android.app.NotificationManager
@@ -10,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.Lifecycle
 import com.linzin.linzindeskclock.autostart.*
+import com.linzin.linzindeskclock.power.shouldPauseAutoClockForLowBattery
 import com.linzin.linzindeskclock.service.AutoClockService
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -203,118 +206,13 @@ data class WeatherInfo(
 
 data class BatteryState(
     val level: Int = 100,
-    val isCharging: Boolean = false
-)
-
-data class UpcomingCalendarEvent(
-    val title: String,
-    val timeLabel: String
+    val isCharging: Boolean = false,
+    val isPowered: Boolean = false
 )
 
 // ==========================================
 // 2. 系統與硬體互動工具函式
 // ==========================================
-
-/**
- * 查詢未來 48 小時內的日曆行程（自動過濾已結束的事件與過去的全天行程）
- */
-fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
-    val hasPermission = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.READ_CALENDAR
-    ) == PackageManager.PERMISSION_GRANTED
-    if (!hasPermission) return emptyList()
-
-    val eventList = mutableListOf<UpcomingCalendarEvent>()
-    val now = System.currentTimeMillis()
-    val endWindow = now + (48 * 60 * 60 * 1000L)
-
-    val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
-    ContentUris.appendId(builder, now)
-    ContentUris.appendId(builder, endWindow)
-
-    val projection = arrayOf(
-        CalendarContract.Instances.TITLE,
-        CalendarContract.Instances.BEGIN,
-        CalendarContract.Instances.END,
-        CalendarContract.Instances.ALL_DAY
-    )
-    val sortOrder = "${CalendarContract.Instances.BEGIN} ASC"
-
-    try {
-        context.contentResolver.query(
-            builder.build(),
-            projection,
-            null,
-            null,
-            sortOrder
-        )?.use { cursor ->
-            val titleIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.TITLE)
-            val beginIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.BEGIN)
-            val endIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.END)
-            val allDayIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.ALL_DAY)
-
-            val timeFormat = SimpleDateFormat("H:mm", Locale.US)
-            val dayFormat = SimpleDateFormat("M/d", Locale.US)
-
-            val nowCal = Calendar.getInstance().apply { timeInMillis = now }
-            val currentYear = nowCal.get(Calendar.YEAR)
-            val currentDayOfYear = nowCal.get(Calendar.DAY_OF_YEAR)
-
-            while (cursor.moveToNext() && eventList.size < 3) {
-                val title = cursor.getString(titleIdx) ?: context.getString(R.string.event_untitled)
-                val beginMillis = cursor.getLong(beginIdx)
-                val endMillis = cursor.getLong(endIdx)
-                val isAllDay = cursor.getInt(allDayIdx) == 1
-
-                if (isAllDay) {
-                    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                        timeInMillis = beginMillis
-                    }
-                    val eventYear = utcCal.get(Calendar.YEAR)
-                    val eventDayOfYear = utcCal.get(Calendar.DAY_OF_YEAR)
-
-                    if (eventYear < currentYear || (eventYear == currentYear && eventDayOfYear < currentDayOfYear)) {
-                        continue
-                    }
-
-                    val isToday = (eventYear == currentYear && eventDayOfYear == currentDayOfYear)
-                    val label = if (isToday) {
-                        context.getString(R.string.event_all_day_today)
-                    } else {
-                        dayFormat.timeZone = TimeZone.getTimeZone("UTC")
-                        "${dayFormat.format(Date(beginMillis))} ${context.getString(R.string.event_all_day)}"
-                    }
-
-                    eventList.add(UpcomingCalendarEvent(title = title, timeLabel = label))
-                } else {
-                    if (endMillis <= now) {
-                        continue
-                    }
-
-                    val eventCal = Calendar.getInstance().apply { timeInMillis = beginMillis }
-                    val isToday = (eventCal.get(Calendar.DAY_OF_YEAR) == currentDayOfYear &&
-                            eventCal.get(Calendar.YEAR) == currentYear)
-
-                    dayFormat.timeZone = TimeZone.getDefault()
-                    timeFormat.timeZone = TimeZone.getDefault()
-
-                    val label = if (isToday) {
-                        timeFormat.format(Date(beginMillis))
-                    } else {
-                        "${dayFormat.format(Date(beginMillis))} ${timeFormat.format(Date(beginMillis))}"
-                    }
-
-                    eventList.add(UpcomingCalendarEvent(title = title, timeLabel = label))
-                }
-            }
-        }
-    } catch (e: Exception) {
-        Log.e("DeskClockCalendar", "Error querying calendar instances", e)
-    }
-
-    return eventList
-}
 
 /**
  * 非同步發送 Shell 指令至系統（如調用 cmd device_state）
@@ -482,7 +380,7 @@ fun rememberBatteryState(): BatteryState {
                     val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                             status == BatteryManager.BATTERY_STATUS_FULL
                     val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else 100
-                    batteryState = BatteryState(level = pct, isCharging = isCharging)
+                    batteryState = BatteryState(level = pct, isCharging = isCharging, isPowered = it.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
                 }
             }
         }
@@ -495,7 +393,7 @@ fun rememberBatteryState(): BatteryState {
             val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
             val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else 100
-            batteryState = BatteryState(level = pct, isCharging = isCharging)
+            batteryState = BatteryState(level = pct, isCharging = isCharging, isPowered = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
         }
 
         onDispose {
@@ -1988,7 +1886,6 @@ fun SideWidgetPager(
     isUiLocked: Boolean,
     calendarEvents: List<UpcomingCalendarEvent>,
     isLocked: Boolean = false,
-    hideMediaWhenLocked: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     VerticalPager(
@@ -1997,8 +1894,8 @@ fun SideWidgetPager(
         modifier = modifier
     ) { page ->
         when (page % 3) {
-            2 -> com.linzin.linzindeskclock.ui.MediaWidget(isLocked = isLocked, hideWhenLocked = hideMediaWhenLocked, controlsEnabled = !isUiLocked)
-            0 -> SideDateWidget(calendarEvents = calendarEvents)
+            2 -> com.linzin.linzindeskclock.ui.MediaWidget(isLocked = isLocked, controlsEnabled = !isUiLocked)
+            0 -> SideDateWidget(calendarEvents = calendarEvents, interactionsEnabled = !isUiLocked && !isLocked)
             1 -> SideWeatherWidget(
                 weatherEnabled = weatherEnabled,
                 weatherInfo = weatherInfo,
@@ -2011,252 +1908,6 @@ fun SideWidgetPager(
 // ==========================================
 // 8. 側邊面板元件 (日曆與天氣)
 // ==========================================
-
-@Composable
-fun SideDateWidget(
-    calendarEvents: List<UpcomingCalendarEvent> = emptyList(),
-    modifier: Modifier = Modifier
-) {
-    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000L)
-        }
-    }
-
-    val calendar = remember(currentTime) {
-        Calendar.getInstance().apply { timeInMillis = currentTime }
-    }
-
-    val dayOfWeekStr = remember(currentTime) {
-        SimpleDateFormat("EEE", Locale.US).format(Date(currentTime))
-    }
-    val monthShortStr = remember(currentTime) {
-        SimpleDateFormat("MMM", Locale.US).format(Date(currentTime))
-    }
-    val dayOfMonthStr = remember(currentTime) {
-        SimpleDateFormat("d", Locale.US).format(Date(currentTime))
-    }
-    val monthFullStr = remember(currentTime) {
-        SimpleDateFormat("MMMM", Locale.US).format(Date(currentTime)).uppercase(Locale.US)
-    }
-
-    val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
-    val maxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val firstDayOfWeek = remember(currentTime) {
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = currentTime
-            set(Calendar.DAY_OF_MONTH, 1)
-        }
-        cal.get(Calendar.DAY_OF_WEEK) - 1
-    }
-
-    val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
-
-    val colorThu = Color(0xFF81C7D4)
-    val colorAccent = Color(0xFF5DAC81)
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    ) {
-        val maxEventsToShow = when {
-            maxHeight < 260.dp -> 1
-            maxHeight < 355.dp -> 2
-            else -> 3
-        }
-        val visibleEvents = calendarEvents.take(maxEventsToShow)
-        val eventCount = visibleEvents.size
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    horizontal = 18.dp,
-                    vertical = when {
-                        eventCount >= 3 -> 8.dp
-                        eventCount == 2 -> 10.dp
-                        else -> 14.dp
-                    }
-                ),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = dayOfWeekStr,
-                        color = colorThu,
-                        fontSize = if (eventCount >= 3) 25.sp else 27.sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(
-                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = monthShortStr,
-                        color = Color.White,
-                        fontSize = if (eventCount >= 3) 25.sp else 27.sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(
-                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                        )
-                    )
-                }
-
-                val digitSize = when {
-                    visibleEvents.isEmpty() -> 72.sp
-                    eventCount >= 3 -> 48.sp
-                    eventCount == 2 -> 54.sp
-                    else -> 64.sp
-                }
-
-                Text(
-                    text = dayOfMonthStr,
-                    color = Color.White,
-                    fontSize = digitSize,
-                    lineHeight = digitSize,
-                    fontWeight = FontWeight.Bold,
-                    style = TextStyle(
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                    ),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-
-            if (visibleEvents.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    visibleEvents.forEach { event ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(7.dp))
-                                .background(Color(0xFF1E1E24))
-                                .padding(
-                                    horizontal = 8.dp,
-                                    vertical = if (eventCount >= 3) 2.5.dp else 3.5.dp
-                                ),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(4.5.dp)
-                                        .clip(CircleShape)
-                                        .background(colorAccent)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = event.timeLabel,
-                                    color = colorThu,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    style = TextStyle(
-                                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                    )
-                                )
-                            }
-
-                            Text(
-                                text = event.title,
-                                color = Color.White,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth(),
-                                style = TextStyle(
-                                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = monthFullStr,
-                    color = colorAccent,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                    modifier = Modifier.padding(bottom = 2.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    daysOfWeek.forEach { dayName ->
-                        Text(
-                            text = dayName,
-                            color = Color(0xFF8E8E93),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.width(20.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(1.dp))
-
-                val totalCells = ((firstDayOfWeek + maxDay + 6) / 7) * 7
-                for (row in 0 until (totalCells / 7)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 0.6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        for (col in 0 until 7) {
-                            val cellIndex = row * 7 + col
-                            val dayNum = cellIndex - firstDayOfWeek + 1
-
-                            if (dayNum in 1..maxDay) {
-                                val isToday = (dayNum == currentDay)
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .then(
-                                            if (isToday) Modifier.border(
-                                                width = 1.2.dp,
-                                                color = colorAccent,
-                                                shape = CircleShape
-                                            ) else Modifier
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$dayNum",
-                                        color = if (isToday) colorAccent else Color.White,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                        textAlign = TextAlign.Center,
-                                        style = TextStyle(
-                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                        )
-                                    )
-                                }
-                            } else {
-                                Spacer(modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun SideWeatherWidget(
@@ -3891,7 +3542,10 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
                         targetStateId = targetStateId,
                         hasHingeSensor = hasHingeSensor,
                         entryMode = entryMode,
-                        onExit = { exitLockedClock() }
+                        onExit = { exitLockedClock() },
+                        onLowBatteryExit = {
+                            if(entryMode == ClockEntryMode.LOCK_SCREEN) exitLockedClock() else finish()
+                        }
                     ) }
                 } else if (!showClockScreen) {
                     InitialScreen(
@@ -3923,7 +3577,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
             ClockCycleStore(this).onUnlock()
             ClockActivationHost.attach(this)
             val autoSettings=com.linzin.linzindeskclock.settings.AutoClockPreferences(this)
-            if(autoSettings.enabled && !AutoClockService.running) {
+            if(autoSettings.enabled && !AutoClockService.running && !shouldPauseAutoClockForLowBattery(this)) {
                 try { ContextCompat.startForegroundService(this,Intent(this,AutoClockService::class.java)) }
                 catch (_:RuntimeException) { autoSettings.lastActivation="MONITOR_STOPPED" }
             }
