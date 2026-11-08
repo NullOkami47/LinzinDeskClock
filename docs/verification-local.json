@@ -89,8 +89,18 @@
     "hints": 4
   },
   "realDevice": {
-    "installed": false,
-    "launched": false,
-    "verification": "Pending final install; no personal-device runtime validation authorised."
+    "installed": true,
+    "versionName": "2.0",
+    "versionCode": 2,
+    "minSdk": 31,
+    "targetSdk": 37,
+    "installOutcome": "Success",
+    "user": 0,
+    "stopped": true,
+    "notLaunched": true,
+    "processRunning": false,
+    "launchCommandIssued": false,
+    "apkSha256": "7437ed7941576badd4e2bb25ef9ca266ea5433544d84a4e599f1dbb58855beb7",
+    "verification": "ADB install and read-only package/process confirmation only; personal-device runtime testing not authorised."
   }
 }

@@ -102,3 +102,7 @@ API 35 系統映像已在官方 Google APIs system-image 索引確認存在。�
 - [Android CLI](https://developer.android.com/tools/agents/android-cli)
 - [Google APIs system-image 索引](https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml)
 - [Android Emulator Runner 官方文件](https://github.com/ReactiveCircus/android-emulator-runner)
+
+## 整合驗證更新
+
+固定來源的 configured-build-04.log 及專案 .local/final-build.log 均為 BUILD SUCCESSFUL。最終本機 JVM 120 tests 全數通過；API 35 隔離模擬器 28 tests 全數通過、無跳過。Lint 0 errors、94 warnings、4 hints。手機安裝結果為 Success，版本 2.0／versionCode 2，套件狀態 stopped=true、notLaunched=true，未啟動。GitHub-hosted 與 self-hosted 執行狀態另見 v2-implementation-report.md 與 self-hosted-validation.md。
