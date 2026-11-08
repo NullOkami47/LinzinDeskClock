@@ -154,14 +154,14 @@ try {
     $failedOrSkipped = [regex]::Matches($output, '(?m)^INSTRUMENTATION_STATUS_CODE:[ \t]*-[1-4][ \t]*\r?$').Count
     $endCodes = [regex]::Matches($output, '(?m)^INSTRUMENTATION_CODE:[ \t]*(?<code>-?\d+)[ \t]*\r?$')
     $normalEnd = $endCodes.Count -eq 1 -and $endCodes[0].Groups['code'].Value -eq '-1'
-    $success = $passed -eq 28 -and $failedOrSkipped -eq 0 -and $normalEnd -and
+    $success = $passed -eq 54 -and $failedOrSkipped -eq 0 -and $normalEnd -and
         $output -notmatch 'INSTRUMENTATION_FAILED|INSTRUMENTATION_ABORTED|FAILURES!!!'
-    [pscustomobject]@{completedAt=(Get-Date -Format o);commit=$env:GITHUB_SHA;testsPassed=$passed;failedOrSkipped=$failedOrSkipped;expectedTests=28;success=$success} |
+    [pscustomobject]@{completedAt=(Get-Date -Format o);commit=$env:GITHUB_SHA;testsPassed=$passed;failedOrSkipped=$failedOrSkipped;expectedTests=54;success=$success} |
         ConvertTo-Json | Tee-Object -FilePath (Join-Path $reportRoot 'result.json')
-    if (-not $success) { throw 'Instrumentation must execute and pass all 28 tests without skips.' }
+    if (-not $success) { throw 'Instrumentation must execute and pass all 54 tests without skips.' }
 } finally {
     $after = Invoke-DedicatedAdb -Arguments @('shell', 'settings', '--user', '0', 'get', 'secure', 'enabled_notification_listeners')
     $after | Set-Content -LiteralPath (Join-Path $reportRoot 'notification-listeners-after.txt')
     if ($after -cne $notificationsBefore) { throw 'Listener grants changed; inspect the dedicated AVD before reuse. No global restoration attempted.' }
 }
-Write-Host 'SELF_HOSTED_VALIDATION_PASSED: debug APK, JVM tests, lint, test APK and 28 dedicated-emulator tests.'
+Write-Host 'SELF_HOSTED_VALIDATION_PASSED: debug APK, JVM tests, lint, test APK and 54 dedicated-emulator tests.'

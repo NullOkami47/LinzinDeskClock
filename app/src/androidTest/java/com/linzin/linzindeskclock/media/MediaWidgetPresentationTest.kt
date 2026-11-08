@@ -180,9 +180,10 @@ class MediaWidgetPresentationTest {
         assertEquals(next.center.y, primary.center.y, 1f)
         assertTrue("The primary control is larger, without filling the panel", primary.width > previous.width && primary.width <= 64f * pixelsPerDp + 1f)
         val elapsed = bounds("media_elapsed")
-        val seek = bounds("media_seek")
+        // Slider semantics deliberately expands its touch target beyond the painted track.
+        val seek = compose.onNodeWithTag("media_progress_track", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val duration = bounds("media_duration")
-        assertTrue(elapsed.right <= seek.left && seek.right <= duration.left)
+        assertTrue("Painted track stays between labels: elapsed=$elapsed track=$seek duration=$duration", elapsed.right <= seek.left && seek.right <= duration.left)
         assertEquals(elapsed.center.y, duration.center.y, 1f)
         compose.onNodeWithText("唯有追趕風的方向").assertIsDisplayed()
         compose.onNodeWithText("知更鳥 / HOYO-MiX / Chevy").assertIsDisplayed()

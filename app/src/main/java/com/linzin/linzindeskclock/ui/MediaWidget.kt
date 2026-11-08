@@ -357,7 +357,7 @@ private fun MediaProgress(session: MediaSessionSnapshot, enabled: Boolean, onCom
                     },
                     thumb = { Box(Modifier.size(8.dp).background(Color.White.copy(alpha = if (enabled) 1f else 0.38f), CircleShape)) },
                     track = {
-                        Canvas(Modifier.fillMaxWidth().height(4.dp)) {
+                        Canvas(Modifier.fillMaxWidth().height(4.dp).testTag("media_progress_track")) {
                             val start = Offset(0f, size.height / 2)
                             drawLine(Color.White.copy(alpha = 0.20f), start, Offset(size.width, start.y), size.height, StrokeCap.Round)
                             drawLine(Color.White.copy(alpha = if (enabled) 0.95f else 0.38f), start,
