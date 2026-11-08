@@ -119,7 +119,7 @@ prepare() {
 gradle() {
   timeout 1800 bash ./gradlew "$@" --no-daemon --no-parallel --max-workers=1 --console=plain \
     --no-build-cache --no-configuration-cache \
-    '-Dorg.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=512m -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8' \
+    '-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=768m -XX:ActiveProcessorCount=4 -Dfile.encoding=UTF-8' \
     "-Dorg.gradle.java.home=$JAVA_HOME" \
     "-Porg.gradle.java.installations.paths=$JAVA_HOME" \
     -Porg.gradle.java.installations.auto-detect=false \
@@ -182,6 +182,8 @@ cleanup_emulator() {
   if identity; then
     adb_target logcat -d > "$EVIDENCE/logs/logcat.txt" 2>&1
     adb_target shell dumpsys activity activities > "$EVIDENCE/logs/activities.txt" 2>&1
+    adb_target shell dumpsys window > "$EVIDENCE/logs/windows.txt" 2>&1
+    adb_target shell dumpsys power > "$EVIDENCE/logs/power.txt" 2>&1
     adb_target shell dumpsys media_session > "$EVIDENCE/logs/media-session.txt" 2>&1
     adb_target shell am force-stop "$PACKAGE"
   fi
@@ -214,7 +216,7 @@ emulator_tests() {
   # A fresh AVD plus -wipe-data and -no-snapshot avoid debug signature conflicts.
   "$EMULATOR" -avd "$AVD_NAME" -port 5554 -no-window -no-snapshot -wipe-data \
     -no-boot-anim -noaudio -camera-back none -camera-front none -gpu swiftshader_indirect \
-    -accel on -cores 2 -memory 2048 > "$EVIDENCE/logs/emulator.txt" 2>&1 &
+    -accel on -cores 4 -memory 3072 > "$EVIDENCE/logs/emulator.txt" 2>&1 &
   EMU_PID=$!
   trap cleanup_emulator EXIT
   trap 'exit 130' INT
@@ -232,6 +234,10 @@ emulator_tests() {
   adb_target shell dumpsys battery reset
   adb_target shell locksettings set-disabled --user 0 true
   [[ "$(adb_target shell locksettings get-disabled --user 0 | tr -d '\r')" == true ]] || fail 'Lockscreen was not disabled.'
+  # Prevent Android's first immersive-mode teaching overlay from stealing focus from PixelCopy/Espresso.
+  # This touches only the fresh emulator after its identity check, never the phone.
+  adb_target shell settings --user 0 put secure immersive_mode_confirmations confirmed
+  [[ "$(adb_target shell settings --user 0 get secure immersive_mode_confirmations | tr -d '\r')" == confirmed ]] || fail 'Immersive tutorial setup failed.'
   adb_target shell input keyevent KEYCODE_WAKEUP
   adb_target shell wm dismiss-keyguard
   adb_target shell wm size 720x1280

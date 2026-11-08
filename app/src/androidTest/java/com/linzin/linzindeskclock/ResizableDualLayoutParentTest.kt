@@ -152,16 +152,39 @@ class ResizableDualLayoutParentTest {
         compose.onNodeWithTag(WIDGETS).performTouchInput {
             swipeUp(startY = height * 0.8f, endY = height * 0.2f, durationMillis = 500)
         }
-        compose.runOnIdle { assertEquals(1, harness.widgetPager.currentPage) }
+        compose.runOnIdle {
+            assertEquals(1, harness.widgetPager.currentPage)
+            // Choosing RIGHT must retain the divider even while the clock panel is smaller.
+            harness.selectClockSide(ClockSide.RIGHT)
+            assertEquals(0.7f, harness.state.ratio, 0f)
+            assertEquals(Mode.DUAL_RIGHT, harness.mode)
+            assertEquals(ClockSide.RIGHT, harness.state.clockSide)
+            assertEquals(SplitLayoutState(0.7f, ClockSide.RIGHT), SplitLayoutPreferences.load(harness.prefs))
+        }
+        assertSplit(harness, 0.7f)
         releaseAt(harness, 0.47f, 0.5f)
         compose.runOnIdle {
             assertEquals(Mode.DUAL_RIGHT, harness.mode)
             assertEquals(ClockSide.RIGHT, harness.state.clockSide)
+            assertEquals(SplitLayoutState(0.5f, ClockSide.RIGHT), SplitLayoutPreferences.load(harness.prefs))
         }
+        releaseAt(harness, 0.31f, 0.3f)
+        compose.runOnIdle {
+            assertEquals(Mode.DUAL_RIGHT, harness.mode)
+            assertEquals(ClockSide.RIGHT, harness.state.clockSide)
+            // Only an explicit selection changes side; LEFT keeps the existing smaller panel.
+            harness.selectClockSide(ClockSide.LEFT)
+            assertEquals(0.3f, harness.state.ratio, 0f)
+            assertEquals(Mode.DUAL_LEFT, harness.mode)
+            assertEquals(ClockSide.LEFT, harness.state.clockSide)
+            assertEquals(SplitLayoutState(0.3f, ClockSide.LEFT), SplitLayoutPreferences.load(harness.prefs))
+        }
+        assertSplit(harness, 0.3f)
         releaseAt(harness, 0.53f, 0.5f)
         compose.runOnIdle {
             assertEquals(Mode.DUAL_LEFT, harness.mode)
             assertEquals(ClockSide.LEFT, harness.state.clockSide)
+            assertEquals(SplitLayoutState(0.5f, ClockSide.LEFT), SplitLayoutPreferences.load(harness.prefs))
             assertSame(clockPager, harness.clockPager)
             assertSame(widgetPager, harness.widgetPager)
             assertEquals(1, harness.widgetPager.currentPage)
@@ -176,6 +199,7 @@ class ResizableDualLayoutParentTest {
 
     private fun releaseAt(harness: Harness, raw: Float, expected: Float, edge: Float = 0f) {
         val before = compose.runOnIdle { harness.state.ratio }
+        val chosenSide = compose.runOnIdle { harness.state.clockSide }
         val count = compose.runOnIdle { harness.finished.size }
         val bounds = root().fetchSemanticsNode().boundsInRoot
         val hit = divider().fetchSemanticsNode().boundsInRoot
@@ -186,13 +210,18 @@ class ResizableDualLayoutParentTest {
             moveTo(start + Offset((raw - before) * bounds.width + direction * harness.touchSlop, 0f))
         }
         assertSplit(harness, raw)
-        compose.runOnIdle { assertEquals(count, harness.finished.size) }
+        compose.runOnIdle {
+            assertEquals(chosenSide, harness.state.clockSide)
+            assertEquals(count, harness.finished.size)
+        }
         root().performTouchInput { up() }
         assertSplit(harness, expected)
         compose.runOnIdle {
+            assertEquals(chosenSide, harness.state.clockSide)
             assertEquals(count + 1, harness.finished.size)
             assertEquals(harness.state, harness.finished.last())
             assertEquals(harness.state, SplitLayoutPreferences.load(harness.prefs))
+            assertEquals(chosenSide, SplitLayoutPreferences.load(harness.prefs).clockSide)
         }
     }
     private fun showParent(): Harness {
@@ -299,6 +328,14 @@ class ResizableDualLayoutParentTest {
         lateinit var widgetPager: PagerState
         val updates = mutableListOf<SplitLayoutState>()
         val finished = mutableListOf<SplitLayoutState>()
+
+        fun selectClockSide(side: ClockSide) {
+            mode = if (side == ClockSide.LEFT) Mode.DUAL_LEFT else Mode.DUAL_RIGHT
+            if (state.clockSide != side) {
+                state = state.withClockSide(side)
+                SplitLayoutPreferences.save(prefs, state)
+            }
+        }
     }
 
     private companion object {

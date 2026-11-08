@@ -180,7 +180,7 @@ def run_phase(phase, root):
             "completedAt": datetime.now(timezone.utc).isoformat(),
             "pipelineId": os.environ.get("LINZIN_PIPELINE_ID"),
             "workflowId": os.environ.get("CIRCLE_WORKFLOW_ID"), "buildUrl": os.environ.get("CIRCLE_BUILD_URL"),
-            "machineImage": "android:2026.10.1", "resourceClass": "medium", "jdk": "25.0.5+8",
+            "machineImage": "android:2026.10.1", "resourceClass": "large", "jdk": "25.0.5+8",
             "compileSdk": "37.0", "buildTools": "36.0.0", "minSdk": 31, "targetSdk": 37,
             "jvm": build["jvm"], "lint": build["lint"], "instrumentation": android,
             "backgroundClock": background, "apks": build["apks"],

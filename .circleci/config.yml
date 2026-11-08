@@ -19,7 +19,7 @@ jobs:
   android-full-validation:
     machine:
       image: android:2026.10.1
-    resource_class: medium # Gen1: 2 vCPU / 7.5 GB; build BEFORE emulator boot.
+    resource_class: large # 4 vCPU / 15 GB for responsive software-rendered Android UI tests.
     working_directory: ~/linzin-desk-clock
     environment:
       LINZIN_FALLBACK_ENABLED: "<< pipeline.parameters.run-fallback >>"
