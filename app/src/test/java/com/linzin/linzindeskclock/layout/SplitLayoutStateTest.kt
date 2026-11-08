@@ -123,6 +123,45 @@ class SplitLayoutStateTest {
         assertEquals(first.hashCode(), second.hashCode())
     }
 
+    @Test
+    fun `release snaps all three bands including their exact endpoints`() {
+        for ((target, samples) in listOf(
+            0.3f to listOf(0.25f, 0.29f, 0.3f, 0.31f, 0.35f),
+            0.5f to listOf(0.45f, 0.49f, 0.5f, 0.51f, 0.55f),
+            0.7f to listOf(0.65f, 0.69f, 0.7f, 0.71f, 0.75f)
+        )) {
+            for (sample in samples) {
+                for (previousSide in ClockSide.entries) {
+                    val state = SplitLayoutState(sample, previousSide)
+                    assertState(target, state.clockSide, state.release())
+                    assertEquals(sample, state.ratio, 0f)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `release keeps values one float outside each snap band unchanged`() {
+        for ((lower, upper) in listOf(0.25f to 0.35f, 0.45f to 0.55f, 0.65f to 0.75f)) {
+            for (ratio in listOf(java.lang.Math.nextDown(lower), java.lang.Math.nextUp(upper))) {
+                val state = SplitLayoutState(ratio)
+                assertSame(state, state.release())
+            }
+        }
+        for (ratio in listOf(0.2f, 0.4f, 0.6f, 0.8f)) {
+            val state = SplitLayoutState(ratio)
+            assertSame(state, state.release())
+        }
+    }
+
+    @Test
+    fun `dragging through thirty fifty and seventy remains continuous`() {
+        var state = SplitLayoutState(0.8f)
+        for (target in listOf(0.75f, 0.69f, 0.65f, 0.55f, 0.51f, 0.49f, 0.45f, 0.35f, 0.29f, 0.25f)) {
+            state = state.dragBy((target - state.ratio) * 1000f, 1000f)
+            assertEquals(target, state.ratio, 0.000001f)
+        }
+    }
     private fun assertState(ratio: Float, side: ClockSide, actual: SplitLayoutState) {
         assertEquals(ratio, actual.ratio, 0.000001f)
         assertEquals(side, actual.clockSide)

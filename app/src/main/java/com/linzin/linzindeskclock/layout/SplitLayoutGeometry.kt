@@ -30,3 +30,19 @@ internal fun SplitLayoutState.geometry(totalWidthPx: Int, requestedHitWidthPx: I
         hitWidthPx = hitWidth
     )
 }
+
+/**
+ * Use the same rounded divider pixel as measurement/drawing for a pointer release. For example,
+ * a drag can produce 0.24999999 even though the divider is visibly at pixel 250 of 1000.
+ * Only the snap decision uses pixel precision; unsnapped ratios and the last clock side survive.
+ */
+internal fun SplitLayoutState.releaseAtWidth(totalWidthPx: Int): SplitLayoutState {
+    if (totalWidthPx <= 0) return release()
+    val dividerPx = geometry(totalWidthPx, 0).splitPx
+    val anchor = SplitLayoutState.SNAP_BANDS.firstOrNull { (band, _) ->
+        // Round the band edges too: e.g. 35% of 319px lies between physical pixels.
+        dividerPx in (totalWidthPx * band.start).roundToInt()..
+            (totalWidthPx * band.endInclusive).roundToInt()
+    }?.second
+    return anchor?.let { withRatio(it) } ?: this
+}

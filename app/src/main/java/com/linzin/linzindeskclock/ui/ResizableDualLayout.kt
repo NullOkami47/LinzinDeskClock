@@ -42,6 +42,7 @@ import com.linzin.linzindeskclock.R
 import com.linzin.linzindeskclock.layout.ClockSide
 import com.linzin.linzindeskclock.layout.SplitLayoutState
 import com.linzin.linzindeskclock.layout.geometry
+import com.linzin.linzindeskclock.layout.releaseAtWidth
 import kotlin.math.roundToInt
 
 private val DividerTouchWidth = 48.dp
@@ -55,7 +56,8 @@ private const val AccessibleRatioStep = 0.05f
  * [state] belongs to the parent; [onStateChange] must synchronously update that hoisted state.
  *
  * Every drag delta is reported without snapping. Only a successful pointer release calls
- * SplitLayoutState.release(), reports its result, then calls [onDragFinished] for persistence.
+ * releaseAtWidth() using the rendered divider pixel, reports its result, then calls
+ * [onDragFinished] for persistence. Release bands are 25..35%, 45..55%, and 65..75%.
  * Cancellation (including locking during a drag) keeps the last reported ratio without snapping
  * or calling onDragFinished. Locking also disables keyboard and accessibility adjustments.
  *
@@ -161,7 +163,7 @@ fun ResizableDualLayout(
                                         }
                                     },
                                     onDragEnd = {
-                                        val released = draggingState?.release()
+                                        val released = draggingState?.releaseAtWidth(containerWidthPx)
                                         draggingState = null
                                         if (!currentIsUiLocked && released != null) {
                                             currentOnStateChange(released)

@@ -8,9 +8,9 @@
     <string name="auto_foldable_unchanged">折叠机仍使用原有铰链触发。此监测仅适用于没有铰链传感器的普通手机。</string>
     <string name="auto_status_disabled">监测已关闭，仍可手动进入或设置屏幕保护程序。</string>
     <string name="auto_status_failed">Android 未允许监测启动。请在应用显示时在此重试。</string>
-    <string name="auto_status_restart">已启用但监测未运行。重启或系统停止后，请点击“恢复监测”。</string>
+    <string name="auto_status_restart">监测当前未运行。可在此恢复；部分厂商会限制后台应用。</string>
     <string name="auto_status_notifications">监测运行中；通知被阻止，无法使用后台点击打开备用方式。</string>
-    <string name="auto_status_ready">监测运行中。从本应用锁定时可尝试显示时钟；后台使用会提供通知。</string>
+    <string name="auto_status_ready">监测运行中。启用上方自动打开，即可从其他 App 锁屏后显示时钟；未授权时提供就绪通知。</string>
     <string name="auto_restart">恢复监测</string>
     <string name="auto_notification_setup">通知设置</string>
     <string name="auto_media_granted">媒体通知访问已启用。</string>
@@ -19,7 +19,7 @@
     <string name="auto_media_privacy">锁屏隐藏媒体信息与封面</string>
     <string name="auto_dream_setup">设置系统屏幕保护程序</string>
     <string name="auto_dream_description">请在系统屏幕保护程序中选择 Linzin Desk Clock。支持的设备会在充电或底座模式启动，仍会检查姿势和充电条件。可按右上角按钮或从底部边缘向上长滑退出。</string>
-    <string name="auto_platform_limit">Android 与厂商省电规则可能阻止自动显示或传感数据。前台通知让监测可见，但不代表取得后台启动权限。不需要 root、Shizuku、悬浮窗或无障碍访问。退出后须先解锁，才会允许下一次尝试。</string>
+    <string name="auto_platform_limit">需要先完成一次设置。启用后，事件监测会在关闭任务时继续，并在重启后恢复；只有新的锁定事件才会开始限时检测。部分厂商还需要在 App 设置允许后台活动或自动启动。强制停止后须重新打开 App 才能恢复。时钟不会解除系统安全锁定。</string>
     <string name="auto_settings_unavailable">此设备无法打开该系统设置页面。</string>
     <string name="auto_monitor_channel">桌面时钟监测</string>
     <string name="auto_offer_channel">桌面时钟已就绪</string>
@@ -31,4 +31,20 @@
     <string name="auto_exit">退出桌面时钟</string>
     <string name="auto_sensor_missing">此设备没有可用的重力或加速度传感器，无法运行自动姿势检测。</string>
     <string name="auto_ui_lock">切换时钟操作锁定</string>
+    <string name="auto_background_enable">从任何 App 锁屏后自动打开</string>
+    <string name="auto_background_setup">设置自动打开权限</string>
+    <string name="auto_background_explanation">要从其他 App 锁屏后自动打开时钟，Android 需要“显示在其他应用上层”特殊访问权限。本应用仅在锁定后的姿势检测通过时，使用此权限打开普通时钟页面；不会在其他 App 上绘制悬浮窗，也不会解除锁定。请在下一个系统页面授权一次，之后不必每次先打开本 App。可随时关闭此选项。</string>
+    <string name="auto_background_granted">自动打开所需的特殊访问权限已授予。</string>
+    <string name="auto_background_missing">从其他 App 锁屏后自动打开，需要先完成一次特殊访问权限设置；尚未授权时会使用就绪通知。</string>
+    <string name="auto_status_automatic_ready">已就绪：使用任何 App，将手机横放在支架上再锁屏。离开或从最近任务移除时钟后，监测仍会继续。</string>
+    <string name="auto_result_scanning">最近一次：正在锁定后 5 秒期限内确认姿势。</string>
+    <string name="auto_result_no_match">最近一次：姿势或充电条件未稳定满足，或系统未提供传感数据。请解锁再锁定以重新检测。</string>
+    <string name="auto_result_notification">最近一次：已提供就绪通知；自动打开权限尚不可用。</string>
+    <string name="auto_result_requested">最近一次：已请求打开时钟，等待系统显示窗口。</string>
+    <string name="auto_result_shown">最近一次：时钟已在锁屏上显示。</string>
+    <string name="auto_result_blocked">最近一次：系统未确认自动显示，或已停止监测。请确认特殊访问权限与 App 的后台运行设置。</string>
+    <string name="auto_app_settings">App 后台运行与电池设置</string>
+    <string name="auto_cancel">取消</string>
+    <string name="auto_done">完成</string>
+    <string name="auto_setup">设置自动桌面时钟</string>
 </resources>

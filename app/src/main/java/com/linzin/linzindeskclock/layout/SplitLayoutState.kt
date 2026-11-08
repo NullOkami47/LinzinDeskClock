@@ -43,9 +43,10 @@ class SplitLayoutState(
         return withRatio(next.toFloat())
     }
 
-    /** Snap to the centre only on release, inclusive of both 0.45 and 0.55. */
+    /** Snap only on release: 25..35% -> 30%, 45..55% -> 50%, 65..75% -> 70%, inclusive. */
     fun release(): SplitLayoutState =
-        if (ratio in SNAP_START..SNAP_END) withRatio(CENTRE_RATIO) else this
+        SNAP_BANDS.firstOrNull { (band, _) -> ratio in band }
+            ?.let { (_, anchor) -> withRatio(anchor) } ?: this
 
     override fun equals(other: Any?): Boolean =
         other is SplitLayoutState && ratio == other.ratio && clockSide == other.clockSide
@@ -62,6 +63,13 @@ class SplitLayoutState(
         const val LEGACY_RIGHT_RATIO = 0.3f
         const val SNAP_START = 0.45f
         const val SNAP_END = 0.55f
+
+        // Share exact bands with the UI's pixel-based release classification.
+        internal val SNAP_BANDS = listOf(
+            (0.25f..0.35f) to LEGACY_RIGHT_RATIO,
+            (SNAP_START..SNAP_END) to CENTRE_RATIO,
+            (0.65f..0.75f) to DEFAULT_RATIO
+        )
 
         /** Accepts ClockLayoutMode.name without depending on the Activity's enum. */
         fun fromLegacyMode(mode: String?): SplitLayoutState =

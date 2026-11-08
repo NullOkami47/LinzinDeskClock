@@ -1,25 +1,37 @@
 package com.linzin.linzindeskclock.ui
 
 import android.os.SystemClock
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,29 +47,38 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.linzin.linzindeskclock.R
 import com.linzin.linzindeskclock.media.AlbumArtBackground
+import com.linzin.linzindeskclock.media.AlbumArtGlassBackground
 import com.linzin.linzindeskclock.media.MediaAccess
 import com.linzin.linzindeskclock.media.MediaCommand
+import com.linzin.linzindeskclock.media.MediaNotificationAccess
 import com.linzin.linzindeskclock.media.MediaSessionRepository
 import com.linzin.linzindeskclock.media.MediaSessionSnapshot
+import com.linzin.linzindeskclock.media.MediaWidgetState
 import com.linzin.linzindeskclock.media.PlaybackPhase
 import com.linzin.linzindeskclock.media.mediaPresentationPolicy
 import com.linzin.linzindeskclock.media.primaryCommand
@@ -65,15 +86,13 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 
 private val MediaSurface = Color(0xFF1E1E22)
-private val MediaMuted = Color(0xFFA0A0AA)
+private val MediaMuted = Color.White.copy(alpha = 0.72f)
 private val MediaAccent = Color(0xFF81C7D4)
 
 /**
- * Parent owns pager/layout and actual keyguard/dream privacy state.
- * isLocked + hideWhenLocked removes all metadata/art immediately, without a fade-out.
- * With privacy off, authorised transport remains available while locked.
- * controlsEnabled=false is UI Lock, retaining visible metadata and artwork.
- * Permission/setup is deliberately absent; the parent handles that in unlocked settings.
+ * Parent owns actual keyguard/dream privacy and UI Lock. Privacy removes sensitive content
+ * immediately, outside both artwork crossfades. Keyguard alone does not block authorised
+ * transport, but notification settings are always restricted to an unlocked device and UI.
  */
 @Composable
 fun MediaWidget(
@@ -82,12 +101,14 @@ fun MediaWidget(
     modifier: Modifier = Modifier,
     controlsEnabled: Boolean = true,
 ) {
-    val context = LocalContext.current.applicationContext
+    val context = LocalContext.current
+    val appContext = context.applicationContext
     val owner = LocalLifecycleOwner.current
-    val repository = remember(context) { MediaSessionRepository(context) }
+    val repository = remember(appContext) { MediaSessionRepository(appContext) }
     val policy = mediaPresentationPolicy(isLocked, hideWhenLocked, controlsEnabled)
     val privacyHidden = policy.hideContent
     val interactionsAllowed by rememberUpdatedState(policy.allowControls)
+    val settingsAllowed by rememberUpdatedState(!isLocked && controlsEnabled)
     DisposableEffect(repository, owner, privacyHidden) {
         fun update() {
             if (!privacyHidden && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
@@ -95,7 +116,12 @@ fun MediaWidget(
                 repository.start()
             } else repository.stop()
         }
-        val observer = LifecycleEventObserver { _, _ -> update() }
+        val observer = LifecycleEventObserver { _, event ->
+            // start() is idempotent. A settings overlay may only pause this Activity, so
+            // explicitly rebind on resume instead of waiting for the periodic access check.
+            if (event == Lifecycle.Event.ON_RESUME) repository.stop()
+            update()
+        }
         owner.lifecycle.addObserver(observer)
         update()
         onDispose {
@@ -105,117 +131,204 @@ fun MediaWidget(
     }
     SideEffect { repository.setInteractionLocked(!interactionsAllowed) }
     val state by repository.state.collectAsState()
-    Surface(modifier = modifier, color = MediaSurface, shape = RoundedCornerShape(20.dp)) {
-        // Outside the art crossfade: privacy hiding/revocation removes outgoing sensitive frames.
+    MediaWidgetContent(
+        state = state,
+        isLocked = isLocked,
+        hideWhenLocked = hideWhenLocked,
+        controlsEnabled = controlsEnabled,
+        modifier = modifier,
+        onOpenNotificationAccess = {
+            // openSettings also checks the live KeyguardManager, covering a lock race.
+            if (settingsAllowed) MediaNotificationAccess.openSettings(context)
+        },
+        onCommand = { action, position ->
+            state.session?.let { session ->
+                if (interactionsAllowed) repository.dispatch(session.sessionId, action, position,
+                    if (action == MediaCommand.SEEK) session.metadataRevision else null)
+            }
+        },
+    )
+}
+
+/** State-only presentation, shared by the real repository host and instrumentation fixtures. */
+@Composable
+fun MediaWidgetContent(
+    state: MediaWidgetState,
+    isLocked: Boolean,
+    hideWhenLocked: Boolean,
+    onOpenNotificationAccess: () -> Unit,
+    onCommand: (MediaCommand, Long?) -> Unit,
+    modifier: Modifier = Modifier,
+    controlsEnabled: Boolean = true,
+) {
+    val policy = mediaPresentationPolicy(isLocked, hideWhenLocked, controlsEnabled)
+    Surface(modifier = modifier.testTag("media_widget"), color = MediaSurface, shape = RoundedCornerShape(20.dp)) {
         val session = state.session
         when {
-            privacyHidden -> MediaStatus(stringResource(R.string.media_hidden))
-            state.access == MediaAccess.NOT_GRANTED -> MediaStatus(
-                stringResource(R.string.media_permission_required),
-                if (isLocked) null else stringResource(R.string.media_permission_settings_hint),
-            )
+            // Permission guidance is not media metadata; a locked user sees an unlock hint.
+            state.access == MediaAccess.NOT_GRANTED -> MediaPermissionStatus(isLocked, controlsEnabled, onOpenNotificationAccess)
+            policy.hideContent -> MediaStatus(stringResource(R.string.media_hidden))
             state.access == MediaAccess.CONNECTING -> MediaStatus(stringResource(R.string.media_connecting))
             state.access == MediaAccess.UNAVAILABLE -> MediaStatus(stringResource(R.string.media_unavailable))
             state.access != MediaAccess.READY -> MediaStatus(stringResource(R.string.media_starting))
             session == null -> MediaStatus(stringResource(R.string.media_no_session), stringResource(R.string.media_no_session_hint))
-            else -> {
-                val overlayFadePx = with(LocalDensity.current) { 32.dp.toPx() }
-                val overlay = remember(overlayFadePx) {
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f)),
-                        endY = overlayFadePx,
-                    )
-                }
-                Box(Modifier.fillMaxSize()) {
-                    // The fitted cover and mirrored margins use the entire secondary panel.
-                    // Text/control layout never changes the image's fit rectangle.
-                    AlbumArtBackground(session.artwork, Modifier.matchParentSize())
-                    val command: (MediaCommand, Long?) -> Unit = { action, position ->
-                        if (interactionsAllowed) repository.dispatch(session.sessionId, action, position,
-                            if (action == MediaCommand.SEEK) session.metadataRevision else null)
-                    }
-                    MediaDetails(
-                        session = session,
-                        controlsEnabled = policy.allowControls,
-                        onCommand = command,
-                        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .background(overlay)
-                            .padding(start = 12.dp, end = 12.dp, top = 32.dp, bottom = 12.dp),
-                    )
-                }
+            else -> MediaPresentation(session, policy.allowControls, onCommand)
+        }
+    }
+}
+
+@Composable
+private fun MediaPermissionStatus(isLocked: Boolean, controlsEnabled: Boolean, onOpenSettings: () -> Unit) {
+    val hint = when {
+        isLocked -> R.string.media_permission_unlock_hint
+        !controlsEnabled -> R.string.media_permission_ui_unlock_hint
+        else -> R.string.media_permission_settings_hint
+    }
+    MediaStatus(stringResource(R.string.media_permission_required), stringResource(hint)) {
+        if (!isLocked && controlsEnabled) {
+            Button(
+                onClick = { if (!isLocked && controlsEnabled) onOpenSettings() },
+                modifier = Modifier.padding(top = 16.dp).widthIn(max = 280.dp).fillMaxWidth()
+                    .heightIn(min = 48.dp).testTag("media_permission_button"),
+                colors = ButtonDefaults.buttonColors(containerColor = MediaAccent, contentColor = MediaSurface),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) { Text(stringResource(R.string.media_access_open_settings), textAlign = TextAlign.Center) }
+        }
+    }
+}
+
+@Composable
+private fun MediaStatus(title: String, detail: String? = null, action: @Composable () -> Unit = {}) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val padding = if (maxWidth < 160.dp) 8.dp else 20.dp
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            if (detail != null) Text(detail, color = MediaMuted, style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+            action()
+        }
+    }
+}
+
+@Composable
+private fun MediaPresentation(session: MediaSessionSnapshot, controlsEnabled: Boolean, onCommand: (MediaCommand, Long?) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+        if (maxWidth >= 360.dp && maxWidth > maxHeight * 1.25f) {
+            // A short landscape panel needs a full-height cover and independently scrollable controls.
+            val controlsWidth = (maxWidth * 0.42f).coerceAtLeast(184.dp).coerceAtMost(maxWidth * 0.55f)
+            Row(Modifier.fillMaxSize()) {
+                AlbumArtBackground(session.artwork, Modifier.weight(1f).fillMaxHeight().testTag("media_artwork"))
+                MediaGlassPanel(session, controlsEnabled, onCommand, Modifier.width(controlsWidth).fillMaxHeight())
+            }
+        } else {
+            val stackedTransport = maxWidth < 160.dp
+            val minimum = (if (stackedTransport) 288.dp else 184.dp) * fontScale
+            val panelHeight = maxOf(maxHeight * 0.30f, minimum)
+                .coerceAtMost(maxHeight * if (stackedTransport) 0.62f else 0.58f)
+            Column(Modifier.fillMaxSize()) {
+                // Reserve a separate viewport: the whole sharp cover is never covered by controls.
+                AlbumArtBackground(session.artwork, Modifier.weight(1f).fillMaxWidth().testTag("media_artwork"))
+                MediaGlassPanel(session, controlsEnabled, onCommand, Modifier.fillMaxWidth().height(panelHeight))
             }
         }
     }
 }
 
 @Composable
-private fun MediaStatus(title: String, detail: String? = null) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-        if (detail != null) Text(detail, color = MediaMuted, style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+private fun MediaGlassPanel(session: MediaSessionSnapshot, controlsEnabled: Boolean,
+    onCommand: (MediaCommand, Long?) -> Unit, modifier: Modifier) {
+    val shape = RoundedCornerShape(24.dp)
+    Box(modifier.clip(shape).background(MediaSurface).testTag("media_glass_panel")) {
+        // Only this background copy is blurred. Text, seek bar and buttons stay sharp.
+        AlbumArtGlassBackground(session.artwork, Modifier.matchParentSize())
+        Box(Modifier.matchParentSize().background(MediaSurface.copy(alpha = 0.30f))
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.03f))))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), shape))
+        MediaDetails(session, controlsEnabled, onCommand, Modifier.fillMaxSize())
     }
 }
 
 @Composable
-private fun MediaDetails(
-    session: MediaSessionSnapshot,
-    controlsEnabled: Boolean,
-    onCommand: (MediaCommand, Long?) -> Unit,
-    modifier: Modifier,
-) {
-    Column(modifier, verticalArrangement = Arrangement.Center) {
-        Text(session.title.ifBlank { stringResource(R.string.media_unknown_title) }, color = Color.White,
-            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(session.artist.ifBlank { stringResource(R.string.media_unknown_artist) }, color = MediaMuted,
-            style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (session.album.isNotBlank()) Text(session.album, color = MediaMuted,
-            style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(stringResource(when (session.playback.phase) {
-            PlaybackPhase.PLAYING, PlaybackPhase.FAST_FORWARDING, PlaybackPhase.REWINDING -> R.string.media_state_playing
-            PlaybackPhase.PAUSED -> R.string.media_state_paused
-            PlaybackPhase.BUFFERING, PlaybackPhase.SKIPPING -> R.string.media_state_buffering
-            PlaybackPhase.CONNECTING -> R.string.media_state_connecting
-            PlaybackPhase.STOPPED -> R.string.media_state_stopped
-            PlaybackPhase.ERROR -> R.string.media_state_error
-            PlaybackPhase.NONE -> R.string.media_state_idle
-        }), color = MediaAccent, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
-        MediaProgress(session, controlsEnabled, onCommand)
-        val primary = primaryCommand(session.playback.phase, session.actions)
-        val hasControls = primary != null || session.actions.previous || session.actions.next
-        if (hasControls) BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val buttons: @Composable () -> Unit = {
-                if (session.actions.previous) MediaButton(MediaIcons.Previous, stringResource(R.string.media_previous), controlsEnabled) { onCommand(MediaCommand.PREVIOUS, null) }
-                if (primary != null) {
-                    val label = when (primary) {
-                        MediaCommand.PLAY -> R.string.media_play
-                        MediaCommand.PAUSE -> R.string.media_pause
-                        else -> R.string.media_toggle
-                    }
-                    MediaButton(if (session.playback.phase.active) MediaIcons.Pause else MediaIcons.Play,
-                        stringResource(label), controlsEnabled) { onCommand(primary, null) }
-                }
-                if (session.actions.next) MediaButton(MediaIcons.Next, stringResource(R.string.media_next), controlsEnabled) { onCommand(MediaCommand.NEXT, null) }
+private fun MediaDetails(session: MediaSessionSnapshot, controlsEnabled: Boolean,
+    onCommand: (MediaCommand, Long?) -> Unit, modifier: Modifier) {
+    BoxWithConstraints(modifier) {
+        val compact = maxWidth < 240.dp
+        val padding = if (compact) 8.dp else 16.dp
+        val shadow = with(LocalDensity.current) { Shadow(Color.Black.copy(alpha = 0.35f), Offset(0f, 1.dp.toPx()), 4.dp.toPx()) }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = padding, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)) {
+            Text(session.title.ifBlank { stringResource(R.string.media_unknown_title) }, color = Color.White,
+                style = (if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge).copy(shadow = shadow),
+                fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().testTag("media_title"))
+            Text(session.artist.ifBlank { stringResource(R.string.media_unknown_artist) }, color = MediaMuted,
+                style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow), textAlign = TextAlign.Center,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().testTag("media_artist"))
+            // Routine playing/paused metadata is conveyed by the main control. Keep exceptional states visible.
+            val status = when (session.playback.phase) {
+                PlaybackPhase.BUFFERING, PlaybackPhase.SKIPPING -> R.string.media_state_buffering
+                PlaybackPhase.CONNECTING -> R.string.media_state_connecting
+                PlaybackPhase.ERROR -> R.string.media_state_error
+                else -> null
             }
-            if (maxWidth < 144.dp) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { buttons() }
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically) { buttons() }
+            if (status != null) Text(stringResource(status), color = MediaMuted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+            MediaProgress(session, controlsEnabled, onCommand)
+            MediaTransport(session, controlsEnabled, onCommand)
+            val hasControls = primaryCommand(session.playback.phase, session.actions) != null || session.actions.previous || session.actions.next
+            val hint = when {
+                !controlsEnabled -> R.string.media_controls_ui_locked
+                !hasControls && !session.actions.seek -> R.string.media_controls_unavailable
+                else -> null
             }
+            if (hint != null) Text(stringResource(hint), color = MediaMuted, style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
-        val hint = when {
-            !controlsEnabled -> R.string.media_controls_ui_locked
-            !hasControls && !session.actions.seek -> R.string.media_controls_unavailable
-            else -> null
-        }
-        if (hint != null) Text(stringResource(hint), color = MediaMuted, style = MaterialTheme.typography.labelSmall,
-            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
     }
 }
 
+@Composable
+private fun MediaTransport(session: MediaSessionSnapshot, enabled: Boolean, onCommand: (MediaCommand, Long?) -> Unit) {
+    val primary = primaryCommand(session.playback.phase, session.actions)
+    if (primary == null && !session.actions.previous && !session.actions.next) return
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val primarySize = if (maxWidth >= 192.dp) 64.dp else 48.dp
+        val stacked = maxWidth < 144.dp
+        val previous: @Composable () -> Unit = {
+            if (session.actions.previous) MediaButton(MediaIcons.Previous, stringResource(R.string.media_previous), enabled,
+                tag = "media_previous") { if (enabled) onCommand(MediaCommand.PREVIOUS, null) }
+            else if (!stacked) Spacer(Modifier.size(48.dp))
+        }
+        val next: @Composable () -> Unit = {
+            if (session.actions.next) MediaButton(MediaIcons.Next, stringResource(R.string.media_next), enabled,
+                tag = "media_next") { if (enabled) onCommand(MediaCommand.NEXT, null) }
+            else if (!stacked) Spacer(Modifier.size(48.dp))
+        }
+        val main: @Composable () -> Unit = {
+            if (primary != null) {
+                val label = when (primary) {
+                    MediaCommand.PLAY -> R.string.media_play
+                    MediaCommand.PAUSE -> R.string.media_pause
+                    else -> R.string.media_toggle
+                }
+                MediaButton(if (session.playback.phase.active) MediaIcons.Pause else MediaIcons.Play,
+                    stringResource(label), enabled, size = primarySize, primary = true, tag = "media_play_pause") {
+                    if (enabled) onCommand(primary, null)
+                }
+            } else if (!stacked) Spacer(Modifier.size(primarySize))
+        }
+        if (stacked) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { previous(); main(); next() }
+        } else {
+            Row(Modifier.widthIn(max = 256.dp).fillMaxWidth().align(Alignment.Center),
+                horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { previous(); main(); next() }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MediaProgress(session: MediaSessionSnapshot, enabled: Boolean, onCommand: (MediaCommand, Long?) -> Unit) {
     var now by remember(session.sessionId, session.playback) { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -232,21 +345,59 @@ private fun MediaProgress(session: MediaSessionSnapshot, enabled: Boolean, onCom
     val currentLabel = shownPosition?.let(::formatMediaTime) ?: stringResource(R.string.media_unknown_time)
     val durationLabel = if (session.durationMs > 0) formatMediaTime(session.durationMs) else stringResource(R.string.media_unknown_time)
     val seekLabel = stringResource(R.string.media_seek)
-    if (session.actions.seek && session.durationMs > 0 && position != null) {
-        Slider(value = drag ?: fraction, onValueChange = { drag = it }, enabled = enabled,
-            onValueChangeFinished = {
-                drag?.let { if (enabled) onCommand(MediaCommand.SEEK, (it.toDouble() * session.durationMs).toLong()) }
-                drag = null
-            }, colors = SliderDefaults.colors(thumbColor = MediaAccent, activeTrackColor = MediaAccent),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = seekLabel })
-    } else {
-        LinearProgressIndicator(progress = { fraction }, color = MediaAccent, trackColor = Color(0xFF2C2C34),
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp))
-    }
     val timeDescription = stringResource(R.string.media_progress_description, currentLabel, durationLabel)
-    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = timeDescription }, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(currentLabel, color = MediaMuted, style = MaterialTheme.typography.labelSmall)
-        Text(durationLabel, color = MediaMuted, style = MaterialTheme.typography.labelSmall)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val progressWidth = maxWidth
+        val progress: @Composable (Modifier) -> Unit = { trackModifier ->
+            if (session.actions.seek && session.durationMs > 0 && position != null) {
+                Slider(value = drag ?: fraction, onValueChange = { drag = it }, enabled = enabled,
+                    onValueChangeFinished = {
+                        drag?.let { if (enabled) onCommand(MediaCommand.SEEK, (it.toDouble() * session.durationMs).toLong()) }
+                        drag = null
+                    },
+                    thumb = { Box(Modifier.size(8.dp).background(Color.White.copy(alpha = if (enabled) 1f else 0.38f), CircleShape)) },
+                    track = {
+                        Canvas(Modifier.fillMaxWidth().height(4.dp)) {
+                            val start = Offset(0f, size.height / 2)
+                            drawLine(Color.White.copy(alpha = 0.20f), start, Offset(size.width, start.y), size.height, StrokeCap.Round)
+                            drawLine(Color.White.copy(alpha = if (enabled) 0.95f else 0.38f), start,
+                                Offset(size.width * (drag ?: fraction), start.y), size.height, StrokeCap.Round)
+                        }
+                    },
+                    modifier = trackModifier.height(48.dp).testTag("media_seek").semantics { contentDescription = "$seekLabel, $timeDescription" })
+            } else {
+                Box(trackModifier.height(48.dp), contentAlignment = Alignment.Center) {
+                    LinearProgressIndicator(progress = { fraction }, color = Color.White.copy(alpha = 0.85f), trackColor = Color.White.copy(alpha = 0.20f),
+                        modifier = Modifier.fillMaxWidth().height(4.dp).semantics { contentDescription = timeDescription })
+                }
+            }
+        }
+        val elapsed: @Composable () -> Unit = {
+            Text(currentLabel, color = MediaMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                modifier = Modifier.testTag("media_elapsed"))
+        }
+        val duration: @Composable () -> Unit = {
+            Text(durationLabel, color = MediaMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                modifier = Modifier.testTag("media_duration"))
+        }
+        if (progressWidth >= 224.dp && LocalDensity.current.fontScale <= 1.3f) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                elapsed(); progress(Modifier.weight(1f)); duration()
+            }
+        } else {
+            Column(Modifier.fillMaxWidth()) {
+                progress(Modifier.fillMaxWidth())
+                if (progressWidth >= 112.dp * LocalDensity.current.fontScale) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { elapsed(); duration() }
+                } else {
+                    // Even two short times can collide in a 20% panel at a large font scale.
+                    Column(Modifier.fillMaxWidth()) {
+                        Box(Modifier.align(Alignment.Start)) { elapsed() }
+                        Box(Modifier.align(Alignment.End)) { duration() }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -257,13 +408,18 @@ private fun formatMediaTime(milliseconds: Long): String {
 }
 
 @Composable
-private fun MediaButton(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp).semantics { contentDescription = label }) {
-        Icon(icon, contentDescription = null, tint = if (enabled) MediaAccent else MediaMuted.copy(alpha = 0.4f), modifier = Modifier.size(28.dp))
+private fun MediaButton(icon: ImageVector, label: String, enabled: Boolean, size: Dp = 48.dp,
+    primary: Boolean = false, tag: String, onClick: () -> Unit) {
+    val material = if (primary) Modifier.background(Color.White.copy(alpha = if (enabled) 0.20f else 0.08f), CircleShape)
+        .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape) else Modifier
+    IconButton(onClick = onClick, enabled = enabled,
+        modifier = Modifier.size(size).then(material).testTag(tag).semantics { contentDescription = label }) {
+        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = if (enabled) 0.96f else 0.38f),
+            modifier = Modifier.size(if (primary) size * 0.56f else 28.dp))
     }
 }
 
-/** Small native vectors avoid an extra icon library and provide real labelled 48 dp controls. */
+/** Native vectors preserve labelled 48 dp controls without an extra icon library. */
 private object MediaIcons {
     private fun build(name: String, block: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit) =
         ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)

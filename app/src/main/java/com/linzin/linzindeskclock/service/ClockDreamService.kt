@@ -43,6 +43,7 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
     private lateinit var exit: ClockExitController
     private val unlock = object : BroadcastReceiver() {
         override fun onReceive(context: Context,intent: Intent) {
+            if(intent.action != Intent.ACTION_USER_PRESENT || !getSystemService(android.os.PowerManager::class.java).isInteractive || getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) return
             ending = true; deadlineHandler.removeCallbacksAndMessages(null); scan?.cancel()
             ClockCycleStore(this@ClockDreamService).onUnlock(); finish()
         }
@@ -61,7 +62,7 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
             view.setViewTreeSavedStateRegistryOwner(owner)
             setContentView(view)
         }
-        ContextCompat.registerReceiver(this,unlock,IntentFilter(Intent.ACTION_USER_PRESENT),ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(this,unlock,IntentFilter(Intent.ACTION_USER_PRESENT),ContextCompat.RECEIVER_EXPORTED)
         registered = true
     }
     override fun onDreamingStarted() {

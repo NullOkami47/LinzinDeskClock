@@ -20,11 +20,11 @@ class ClockApplication : Application() {
                     if(!getSystemService(PowerManager::class.java).isInteractive) ClockCycleStore(this@ClockApplication).noteLock()
                     return
                 }
-                if(getSystemService(PowerManager::class.java).isInteractive && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+                if(intent.action == Intent.ACTION_USER_PRESENT && getSystemService(PowerManager::class.java).isInteractive && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
                     ClockCycleStore(this@ClockApplication).onUnlock()
                     com.linzin.linzindeskclock.autostart.ClockActivationHost.onDeviceUnlocked()
                 }
             }
-        },IntentFilter(Intent.ACTION_USER_PRESENT).apply { addAction(Intent.ACTION_SCREEN_OFF) },ContextCompat.RECEIVER_NOT_EXPORTED)
+        },IntentFilter(Intent.ACTION_USER_PRESENT).apply { addAction(Intent.ACTION_SCREEN_OFF) },ContextCompat.RECEIVER_EXPORTED)
     }
 }

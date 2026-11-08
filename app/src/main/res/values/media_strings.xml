@@ -5,7 +5,9 @@
     <string name="media_access_settings_summary">Allow notification access to display and control active media sessions. Notification contents are not stored.</string>
     <string name="media_access_open_settings">Open notification access settings</string>
     <string name="media_permission_required">Media access is off</string>
-    <string name="media_permission_settings_hint">Enable notification access in the clock settings while unlocked.</string>
+    <string name="media_permission_settings_hint">Allow notification access to show your music and playback controls here.</string>
+    <string name="media_permission_unlock_hint">Unlock your device before opening notification access settings.</string>
+    <string name="media_permission_ui_unlock_hint">Turn off UI Lock before opening notification access settings.</string>
     <string name="media_connecting">Connecting to media sessions…</string>
     <string name="media_unavailable">Media sessions are temporarily unavailable</string>
     <string name="media_no_session">No active media session</string>

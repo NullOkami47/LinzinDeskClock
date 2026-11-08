@@ -99,7 +99,36 @@ class AlbumArtBackgroundPixelTest {
         }
     }
 
-    private fun show(cover: MutableState<Bitmap?>, widthDp: Int, heightDp: Int) {
+    @Test fun glassCopyBlursTheCentreRetainsColourAndDoesNotBleedOutsideItsRegion() {
+        show(mutableStateOf(pattern(transpose = false)), 320, 240, glass = true)
+        capture("glass-colour-blur-clip").use { frame ->
+            val middle = frame.panelPixel(0.5f, 0.5f)
+            assertTrue("Real blur must mix both source colours", AndroidColor.red(middle) > 60 && AndroidColor.blue(middle) > 60)
+            assertTrue("Glass retains artwork colours, not a neutral replacement", AndroidColor.green(middle) < 20)
+            val contrast = colourDistance(frame.panelPixel(0.49f, 0.5f), frame.panelPixel(0.51f, 0.5f))
+            assertTrue("The centre seam must be blurred, unlike the sharp cover", contrast < 100)
+            assertTrue("Left source colour survives blur", AndroidColor.red(frame.panelPixel(0.05f, 0.5f)) > 180)
+            assertTrue("Right source colour survives blur", AndroidColor.blue(frame.panelPixel(0.95f, 0.5f)) > 180)
+            assertGuard(frame)
+        }
+    }
+
+    @Test fun glassReplacesItsCoverAndClearsOldPixelsWhenArtworkBecomesNull() {
+        val cover = mutableStateOf<Bitmap?>(solid(AndroidColor.RED))
+        show(cover, 320, 240, glass = true)
+        compose.runOnIdle { cover.value = solid(AndroidColor.BLUE) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(400)
+        capture("glass-replacement").use { assertColour(AndroidColor.BLUE, it.panelPixel(0.5f, 0.5f), "updated glass") }
+        compose.runOnIdle { cover.value = null }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(400)
+        capture("glass-missing-artwork").use {
+            assertColour(AndroidColor.rgb(30, 30, 34), it.panelPixel(0.5f, 0.5f), "old glass cleared")
+            assertGuard(it)
+        }
+    }
+    private fun show(cover: MutableState<Bitmap?>, widthDp: Int, heightDp: Int, glass: Boolean = false) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -110,8 +139,10 @@ class AlbumArtBackgroundPixelTest {
                         hardwareCanvas.set(drawContext.canvas.nativeCanvas.isHardwareAccelerated)
                         drawContent()
                     }, contentAlignment = Alignment.Center) {
-                    AlbumArtBackground(cover.value, Modifier.size(widthDp.dp, heightDp.dp)
-                        .onGloballyPositioned { artworkBounds.set(it.boundsInWindow().pixelRect()) })
+                    val artModifier = Modifier.size(widthDp.dp, heightDp.dp)
+                        .onGloballyPositioned { artworkBounds.set(it.boundsInWindow().pixelRect()) }
+                    if (glass) AlbumArtGlassBackground(cover.value, artModifier)
+                    else AlbumArtBackground(cover.value, artModifier)
                 }
             }
         }

@@ -5,6 +5,48 @@ import org.junit.Test
 
 class SplitLayoutGeometryTest {
     @Test
+    fun `all visible boundaries snap even when percentages fall between pixels`() {
+        for (width in listOf(319, 1001, 1281)) {
+            for ((ratio, target) in listOf(
+                0.25f to 0.3f, 0.35f to 0.3f, 0.45f to 0.5f,
+                0.55f to 0.5f, 0.65f to 0.7f, 0.75f to 0.7f
+            )) {
+                assertEquals("ratio=$ratio width=$width", target,
+                    SplitLayoutState(ratio).releaseAtWidth(width).ratio, 0f)
+            }
+        }
+    }
+    @Test
+    fun `pointer release classifies every visible band boundary at pixel precision`() {
+        for ((lower, upper, target) in listOf(
+            Triple(0.25f, 0.35f, 0.3f), Triple(0.45f, 0.55f, 0.5f),
+            Triple(0.65f, 0.75f, 0.7f)
+        )) {
+            for (ratio in listOf(java.lang.Math.nextDown(lower), java.lang.Math.nextUp(upper))) {
+                val state = SplitLayoutState(ratio)
+                assertEquals(target, state.releaseAtWidth(1000).ratio, 0f)
+                assertEquals(state.clockSide, state.releaseAtWidth(1000).clockSide)
+                assertEquals(ratio, state.ratio, 0f)
+            }
+        }
+    }
+
+    @Test
+    fun `pointer release one rendered pixel outside a band does not snap or quantise`() {
+        for (ratio in listOf(0.249f, 0.351f, 0.449f, 0.551f, 0.649f, 0.751f, 0.40037f, 0.60037f)) {
+            val state = SplitLayoutState(ratio)
+            org.junit.Assert.assertSame(state, state.releaseAtWidth(1000))
+        }
+    }
+
+    @Test
+    fun `pixel based centre release retains the side before rounding`() {
+        assertEquals(ClockSide.RIGHT, SplitLayoutState(0.49999f).releaseAtWidth(1000).clockSide)
+        assertEquals(ClockSide.LEFT, SplitLayoutState(0.50001f).releaseAtWidth(1000).clockSide)
+        assertEquals(0.3f, SplitLayoutState(0.31f).releaseAtWidth(0).ratio, 0f)
+        assertEquals(0.7f, SplitLayoutState(0.69f).releaseAtWidth(-1).ratio, 0f)
+    }
+    @Test
     fun `hit zone overlays the exact split and does not consume panel width`() {
         val actual = SplitLayoutState(0.7f).geometry(1000, 48)
         assertEquals(SplitLayoutGeometry(700, 0, 700, 700, 300, 676, 48), actual)

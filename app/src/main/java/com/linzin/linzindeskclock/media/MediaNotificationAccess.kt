@@ -17,7 +17,7 @@ object MediaNotificationAccess {
             ?.isNotificationListenerAccessGranted(component(context)) == true
     } catch (_: RuntimeException) { false }
 
-    /** For the parent's unlocked settings page only. The widget never calls this. */
+    /** Shared by settings and the media permission action; recheck keyguard at click time. */
     fun openSettings(context: Context): Boolean {
         val keyguard = context.getSystemService(KeyguardManager::class.java)
         if (keyguard == null || keyguard.isDeviceLocked || keyguard.isKeyguardLocked) return false
@@ -31,7 +31,7 @@ object MediaNotificationAccess {
             } catch (_: ActivityNotFoundException) {
                 // Some OEM settings applications do not expose the per-listener screen.
             } catch (_: SecurityException) {
-                return false
+                // An OEM may reject the detail screen but allow the general listener list.
             }
         }
         return false

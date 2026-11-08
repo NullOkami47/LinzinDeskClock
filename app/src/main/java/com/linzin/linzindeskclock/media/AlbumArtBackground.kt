@@ -96,3 +96,62 @@ private class ArtworkRenderer(private val bitmap: Bitmap, blurPx: Float) {
 
     fun release() { node.discardDisplayList() }
 }
+
+/**
+ * A second, fully blurred copy supplies the control panel's material. It is deliberately a
+ * background-only layer: the sharp fitted cover and the controls are different siblings.
+ * Crop-fill here only samples colour; AlbumArtBackground still displays the entire original.
+ */
+@Composable
+fun AlbumArtGlassBackground(artwork: Bitmap?, modifier: Modifier = Modifier) {
+    val blurPx = with(LocalDensity.current) { 28.dp.toPx() }
+    Box(modifier.background(Color(0xFF1E1E22)).clipToBounds()) {
+        Crossfade(targetState = artwork, modifier = Modifier.fillMaxSize(), animationSpec = tween(240), label = "mediaGlass") { cover ->
+            if (cover != null && !cover.isRecycled) {
+                val renderer = remember(cover, blurPx) { GlassArtworkRenderer(cover, blurPx) }
+                DisposableEffect(renderer) { onDispose { renderer.release() } }
+                Canvas(Modifier.fillMaxSize()) {
+                    drawIntoCanvas { canvas -> renderer.draw(canvas.nativeCanvas, size.width.roundToInt(), size.height.roundToInt()) }
+                }
+            }
+        }
+    }
+}
+
+private class GlassArtworkRenderer(private val bitmap: Bitmap, blurPx: Float) {
+    private val shader = BitmapShader(bitmap, Shader.TileMode.MIRROR, Shader.TileMode.MIRROR)
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { this.shader = this@GlassArtworkRenderer.shader }
+    private val node = RenderNode("media-control-glass").apply {
+        setRenderEffect(RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.MIRROR))
+        setClipToBounds(true)
+    }
+    private var width = 0
+    private var height = 0
+
+    fun draw(canvas: AndroidCanvas, newWidth: Int, newHeight: Int) {
+        if (bitmap.isRecycled || newWidth <= 0 || newHeight <= 0) return
+        if (newWidth != width || newHeight != height) {
+            width = newWidth
+            height = newHeight
+            val scale = maxOf(width.toFloat() / bitmap.width, height.toFloat() / bitmap.height)
+            shader.setLocalMatrix(Matrix().apply {
+                setScale(scale, scale)
+                postTranslate((width - bitmap.width * scale) / 2f, (height - bitmap.height * scale) / 2f)
+            })
+            node.setPosition(0, 0, width, height)
+            val recording = node.beginRecording(width, height)
+            recording.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+            node.endRecording()
+        }
+        val saved = canvas.save()
+        canvas.clipRect(0, 0, width, height)
+        if (canvas.isHardwareAccelerated) canvas.drawRenderNode(node)
+        else {
+            // Software preview has colour and clipping, but must not be claimed as blur QA.
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
+        canvas.restoreToCount(saved)
+    }
+
+    fun release() { node.discardDisplayList() }
+}

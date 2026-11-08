@@ -233,17 +233,39 @@ class ResizableDualLayoutTest {
         }
     }
 
-    private fun assertReleaseSnap(targetRatio: Float, expectedSide: ClockSide) {
+    @Test
+    fun releaseSnapsThirtyRegionWithoutSnappingDuringTheDrag() {
+        assertReleaseSnap(0.33f, ClockSide.RIGHT, 0.3f)
+    }
+
+    @Test
+    fun releaseSnapsSeventyRegionWithoutSnappingDuringTheDrag() {
+        assertReleaseSnap(0.67f, ClockSide.LEFT, 0.7f)
+    }
+
+    @Test
+    fun accessibilityCanLeaveThirtyAndSeventyWithoutPointerReleaseSnapping() {
+        val harness = showLayout()
+        for (ratio in listOf(0.3f, 0.33f, 0.7f, 0.67f)) {
+            divider().performSemanticsAction(SemanticsActions.SetProgress) { action ->
+                assertTrue(action(ratio))
+            }
+            assertRatio(harness, ratio)
+        }
+        compose.runOnIdle { assertEquals(4, harness.finished.size) }
+    }
+
+    private fun assertReleaseSnap(targetRatio: Float, expectedSide: ClockSide, snappedRatio: Float = 0.5f) {
         val harness = showLayout()
         beginDrag(harness, firstRatio = targetRatio)
         assertRatio(harness, targetRatio)
         compose.runOnIdle { assertTrue(harness.finished.isEmpty()) }
         root().performTouchInput { up() }
-        assertRatio(harness, 0.5f)
-        assertPhysicalSplit(0.5f, expectedSide)
+        assertRatio(harness, snappedRatio)
+        assertPhysicalSplit(snappedRatio, expectedSide)
         compose.runOnIdle {
-            assertEquals(SplitLayoutState(0.5f, expectedSide), harness.updates.last())
-            assertEquals(listOf(SplitLayoutState(0.5f, expectedSide)), harness.finished)
+            assertEquals(SplitLayoutState(snappedRatio, expectedSide), harness.updates.last())
+            assertEquals(listOf(SplitLayoutState(snappedRatio, expectedSide)), harness.finished)
         }
     }
 

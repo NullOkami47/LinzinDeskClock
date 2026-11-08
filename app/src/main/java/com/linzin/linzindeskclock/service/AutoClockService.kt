@@ -20,13 +20,14 @@ import com.linzin.linzindeskclock.autostart.*
 import com.linzin.linzindeskclock.settings.AutoClockPreferences
 import java.lang.ref.WeakReference
 
-/** Explicitly started by a visible settings action. Not sticky and never started from boot/screen-off. */
+/** User-enabled event monitor. System restart/boot restores listening, never synthesises a lock. */
 class AutoClockService : Service() {
     private lateinit var monitor: LockStateMonitor
     private lateinit var scan: AutoClockTriggerController
     private lateinit var cycle: ClockCycleStore
     private val handler = Handler(Looper.getMainLooper())
     private var scanWindow: ClockLockWindow? = null
+    private var scanProducedOffer = false
     private var candidate = WeakReference<ClockActivationHost.Host>(null)
     private val notifications get() = getSystemService(NotificationManager::class.java)
     override fun onCreate() {
@@ -43,6 +44,8 @@ class AutoClockService : Service() {
                 candidate = WeakReference(ClockActivationHost.current())
                 cancelOffer()
                 scanWindow = window
+                scanProducedOffer = false
+                AutoClockPreferences(this).lastActivation="SCANNING"
                 ClockDreamBridge.scans.begin(window)
                 if(!scan.onLock(deadlineElapsedMs=window.deadline)) ClockDreamBridge.scans.cancel(window)
             }
@@ -54,6 +57,7 @@ class AutoClockService : Service() {
             onEligible = {
                 val window = scanWindow
                 if(window != null && validWindow(window)) {
+                    scanProducedOffer = true
                     val token = cycle.offer()
                     when(ClockDreamBridge.scans.deliver(window,token) { validWindow(window) }) {
                         PendingLockScan.Delivery.ACCEPTED -> Unit
@@ -61,14 +65,26 @@ class AutoClockService : Service() {
                         PendingLockScan.Delivery.FALLBACK -> {
                             if(validWindow(window)) {
                                 showOffer(token)
-                                val host = candidate.get()
-                                if(host != null && ClockActivationHost.current() === host && validWindow(window)) host.enterLockedClock()
+                                val settings = AutoClockPreferences(this)
+                                settings.lastActivation="NOTIFICATION"
+                                val launched = BackgroundClockLauncher(this).launch(token,window)
+                                if(!launched) {
+                                    val host = candidate.get()
+                                    if(host != null && ClockActivationHost.current() === host && validWindow(window)) host.enterLockedClock()
+                                }
+                                // startActivity may be silently blocked by an OEM. Only Activity.onResume marks SHOWN.
+                                if(launched) handler.postDelayed({
+                                    if(settings.lastActivation == "REQUESTED") settings.lastActivation="BLOCKED"
+                                },2500L)
                             } else cycle.invalidateOffer()
                         }
                     }
                 }
             },
-            onFinished = { scanWindow?.let(ClockDreamBridge.scans::cancel); scanWindow = null })
+            onFinished = {
+                if(!scanProducedOffer && scanWindow != null) AutoClockPreferences(this).lastActivation="NO_MATCH"
+                scanWindow?.let(ClockDreamBridge.scans::cancel); scanWindow = null
+            })
     }
     private fun validWindow(window: ClockLockWindow) = AutoClockPreferences(this).enabled && !monitor.activelyUnlocked && cycle.isCurrentWindow(window)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -82,8 +98,10 @@ class AutoClockService : Service() {
             running = true
             monitor.start()
             if(monitor.activelyUnlocked) { cycle.onUnlock(); scan.onUnlock() }
-        } catch (_: RuntimeException) { running = false; stopSelf() }
-        return START_NOT_STICKY
+        } catch (_: RuntimeException) {
+            running = false; AutoClockPreferences(this).lastActivation="MONITOR_STOPPED"; stopSelf(); return START_NOT_STICKY
+        }
+        return START_STICKY
     }
     private fun monitoringNotification(): Notification {
         val open = PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

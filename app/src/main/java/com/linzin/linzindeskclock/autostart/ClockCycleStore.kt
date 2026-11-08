@@ -45,6 +45,14 @@ class ClockCycleStore(
 
     fun isCurrentWindow(window: ClockLockWindow): Boolean = activeWindow() == window
 
+    /** Session continuation may outlive scanning, but never an unlock, suppression or reboot. */
+    fun currentCycle(): ClockLockWindow? = synchronized(prefs) {
+        val record=read()
+        val boot=currentBoot()
+        if(writeFailed || record.suppressed || boot < 0 || record.lockBoot != boot || record.lockedAt < 0 || elapsedRealtime() < record.lockedAt) null
+        else ClockLockWindow(record.lockBoot,record.lockedAt)
+    }
+
     fun claimAttempt(): Boolean = synchronized(prefs) {
         if (writeFailed) return false
         val record = read()

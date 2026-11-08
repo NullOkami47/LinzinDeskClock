@@ -3,9 +3,11 @@
     <string name="media_notification_listener_label">桌鐘媒體存取</string>
     <string name="media_access_settings_title">媒體通知存取權</string>
     <string name="media_access_settings_summary">允許通知存取，以顯示及控制目前的媒體工作階段。不會儲存通知內容。</string>
-    <string name="media_access_open_settings">開啟通知存取設定</string>
+    <string name="media_access_open_settings">前往通知存取權</string>
     <string name="media_permission_required">尚未開啟媒體存取</string>
-    <string name="media_permission_settings_hint">請在解鎖後，從桌鐘設定開啟通知存取權。</string>
+    <string name="media_permission_settings_hint">開啟通知存取權，即可在此顯示曲目並控制播放。</string>
+    <string name="media_permission_unlock_hint">請先解鎖裝置，再開啟通知存取權。</string>
+    <string name="media_permission_ui_unlock_hint">請先解除介面鎖定，再開啟通知存取權。</string>
     <string name="media_connecting">正在連線至媒體工作階段⋯</string>
     <string name="media_unavailable">暫時無法取得媒體工作階段</string>
     <string name="media_no_session">目前沒有媒體工作階段</string>

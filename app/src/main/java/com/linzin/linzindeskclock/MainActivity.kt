@@ -1,6 +1,7 @@
 package com.linzin.linzindeskclock
 
 import com.linzin.linzindeskclock.ui.DeskClockScreen
+import com.linzin.linzindeskclock.settings.AutoClockSetupDialog
 import android.Manifest
 import android.app.KeyguardManager
 import android.app.NotificationManager
@@ -1667,6 +1668,8 @@ fun InitialScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var showNonFoldableDialog by remember { mutableStateOf(false) }
+    var showAutoSetup by remember { mutableStateOf(false) }
+    if(showAutoSetup) AutoClockSetupDialog(hasHingeSensor=hasHingeSensor,onDismiss={ showAutoSetup=false })
 
     val toastLiarFoldableText = stringResource(R.string.toast_liar_foldable)
 
@@ -1708,6 +1711,9 @@ fun InitialScreen(
             contentAlignment = Alignment.Center
         ) {
             val isLandscape = maxWidth > maxHeight
+            androidx.compose.material3.TextButton(
+                onClick={ showAutoSetup=true },modifier=Modifier.align(Alignment.TopEnd)
+            ) { Text(stringResource(R.string.auto_setup)) }
 
             if (isLandscape) {
                 Row(
@@ -3915,6 +3921,11 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
         } else if (!hasHingeSensor && !keyguard.isKeyguardLocked) {
             ClockCycleStore(this).onUnlock()
             ClockActivationHost.attach(this)
+            val autoSettings=com.linzin.linzindeskclock.settings.AutoClockPreferences(this)
+            if(autoSettings.enabled && !AutoClockService.running) {
+                try { ContextCompat.startForegroundService(this,Intent(this,AutoClockService::class.java)) }
+                catch (_:RuntimeException) { autoSettings.lastActivation="MONITOR_STOPPED" }
+            }
         }
         hingeAngleSensor?.let {
             sensorManager.unregisterListener(this)

@@ -7,6 +7,21 @@ import org.junit.Test
 
 /** Real store and serialised state; only the Android storage/clock/boot boundaries are supplied. */
 class ClockCycleStoreTest {
+    @Test fun sessionCycleSurvivesDeadlineButNotUnlockOrSuppression() {
+        val f=Fixture(); f.lock()
+        val cycle=f.store().currentCycle()
+        assertNotNull(cycle)
+        f.now=10_000L
+        assertEquals(0L,f.store().remainingWindowMs())
+        assertEquals(cycle,f.store().currentCycle())
+        f.store().suppress(); assertNull(f.store().currentCycle())
+        f.store().onUnlock(); assertNull(f.store().currentCycle())
+    }
+    @Test fun retainedSessionCannotCrossBoot() {
+        val f=Fixture(); f.lock(); assertNotNull(f.store().currentCycle())
+        f.boot++; assertNull(f.store().currentCycle())
+    }
+
     @Test fun aFreshStoreNeedsAnObservedUnlock() {
         val f = Fixture()
         f.store().noteLock()
