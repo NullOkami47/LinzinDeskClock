@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="split_divider_label">時計とウィジェットの表示幅を調整</string>
+    <string name="split_divider_state">左側 %1$d%%、右側 %2$d%%。時計は%3$sに固定されています。</string>
+    <string name="split_divider_locked">%1$s 操作はロックされています。</string>
+    <string name="split_clock_left">左側</string>
+    <string name="split_clock_right">右側</string>
+    <string name="split_move_left">仕切りを左に移動</string>
+    <string name="split_move_right">仕切りを右に移動</string>
+</resources>

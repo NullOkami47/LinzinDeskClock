@@ -1,0 +1,3 @@
+self-hosted-runner:
+  labels:
+    - linzin-v2-qa

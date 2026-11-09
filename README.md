@@ -110,3 +110,13 @@
 </p>
 
 </div>
+
+## 2.0 桌面時鐘擴充
+
+新增一般手機鎖定觸發、可拖曳雙面板、鎖定畫面媒體控制、行程詳細資訊、低電量保護及真正閒置關屏。保留原有錶盤與摺疊機鉸鏈觸發範圍。
+
+- [啟用方式與平台限制](docs/v2-user-guide.md)
+- [功能與架構](docs/v2-implementation-report.md)
+- [建置與驗證](docs/build-environment.md)
+- [真機驗收清單](docs/v2-device-checklist.md)
+- [閒置關屏與選用權限](docs/screen-off-timeout.md)

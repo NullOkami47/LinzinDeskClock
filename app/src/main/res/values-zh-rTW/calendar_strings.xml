@@ -1,0 +1,14 @@
+<resources>
+    <string name="calendar_event_details">行程詳細資訊</string>
+    <string name="calendar_view_details">查看行程詳細資訊</string>
+    <string name="calendar_start">開始</string>
+    <string name="calendar_end">結束</string>
+    <string name="calendar_location">地點</string>
+    <string name="calendar_description">說明</string>
+    <string name="calendar_name">行事曆</string>
+    <string name="calendar_open_in_app">在行事曆中開啟</string>
+    <string name="calendar_close">關閉</string>
+    <string name="calendar_unlock_to_view">請先解鎖裝置，再查看此行程。</string>
+    <string name="calendar_permission_required">需允許讀取行事曆才能查看此行程。</string>
+    <string name="calendar_app_unavailable">沒有可開啟此行程的行事曆應用程式。</string>
+</resources>

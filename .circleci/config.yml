@@ -1,0 +1,80 @@
+# Manual fallback after GitHub-hosted CI failure. Choose the reviewed branch for
+# BOTH config and checkout; set run-fallback=true, expected-branch to that branch,
+# and expected-sha to its full pushed HEAD. For example: codex/desk-clock-v2-upstream.
+# A push/PR/tag/schedule cannot enable this workflow. No signing or release job.
+# Official references checked 2026-11-09:
+# https://circleci.com/developer/machine/image/android (2026.10.1 in Image Tags)
+# https://circleci.com/docs/reference/configuration-reference/
+# https://circleci.com/docs/guides/orchestrate/pipeline-variables/
+version: 2.1
+
+parameters:
+  run-fallback:
+    type: boolean
+    default: false
+  expected-branch:
+    type: string
+    default: ""
+  expected-sha:
+    type: string
+    default: ""
+
+jobs:
+  android-full-validation:
+    machine:
+      image: android:2026.10.1
+    resource_class: large # 4 vCPU / 15 GB for responsive software-rendered Android UI tests.
+    working_directory: ~/linzin-desk-clock
+    environment:
+      LINZIN_FALLBACK_ENABLED: "<< pipeline.parameters.run-fallback >>"
+      LINZIN_EXPECTED_BRANCH: "<< pipeline.parameters.expected-branch >>"
+      LINZIN_EXPECTED_SHA: "<< pipeline.parameters.expected-sha >>"
+      LINZIN_PIPELINE_EVENT: "<< pipeline.event.name >>"
+      LINZIN_PIPELINE_ID: "<< pipeline.id >>"
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - checkout
+      - run:
+          name: Verify scope and provision exact toolchain
+          command: bash scripts/run-circleci-validation.sh prepare
+          no_output_timeout: 10m
+      - run:
+          name: Build APKs, validate 174 JVM tests and lint
+          command: bash scripts/run-circleci-validation.sh build
+          no_output_timeout: 20m
+      - run:
+          name: Run all 92 tests and background-clock checks on dedicated API 35 AVD
+          command: bash scripts/run-circleci-validation.sh emulator
+          no_output_timeout: 25m
+      - run:
+          name: Verify complete evidence and package APKs with SHA-256
+          command: bash scripts/run-circleci-validation.sh package
+      - run:
+          name: Collect available reports even after failure
+          command: bash scripts/run-circleci-validation.sh collect
+          when: always
+      - store_test_results:
+          path: .local/circleci/test-results
+      - store_artifacts:
+          path: .local/circleci
+          destination: linzin-circleci
+
+workflows:
+  manual-circleci-fallback:
+    when:
+      and:
+        - << pipeline.parameters.run-fallback >>
+        - not:
+            equal: ["", << pipeline.parameters.expected-branch >>]
+        - not:
+            equal: ["", << pipeline.parameters.expected-sha >>]
+        - equal: [<< pipeline.parameters.expected-branch >>, << pipeline.git.branch >>]
+        - equal: ["api", << pipeline.event.name >>]
+    jobs:
+      - android-full-validation:
+          filters:
+            branches:
+              only: << pipeline.parameters.expected-branch >>
+            tags:
+              ignore: /.*/

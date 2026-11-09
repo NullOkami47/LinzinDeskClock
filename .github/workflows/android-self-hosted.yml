@@ -1,0 +1,85 @@
+name: Android self-hosted fallback
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
+      expected_sha:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Reviewed branch; must equal LINZIN_SELF_HOSTED_BRANCH'
+        required: true
+        type: string
+      expected_sha:
+        description: 'Full 40-character SHA of the reviewed branch HEAD'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linzin-v2-dedicated-emulator-qa
+  cancel-in-progress: false
+
+jobs:
+  dedicated-windows-validation:
+    # Disabled until all repository variables and manual inputs are configured.
+    # A reusable call keeps the caller event; only a manual dispatch is authorised.
+    # PR, push, tag and schedule events can never select this self-hosted runner.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      vars.LINZIN_SELF_HOSTED_ENABLED == 'true' &&
+      vars.LINZIN_SELF_HOSTED_REPOSITORY != '' &&
+      vars.LINZIN_SELF_HOSTED_ACTOR != '' &&
+      vars.LINZIN_SELF_HOSTED_BRANCH != '' &&
+      github.repository == vars.LINZIN_SELF_HOSTED_REPOSITORY &&
+      github.actor == vars.LINZIN_SELF_HOSTED_ACTOR &&
+      github.triggering_actor == vars.LINZIN_SELF_HOSTED_ACTOR &&
+      github.ref == format('refs/heads/{0}', vars.LINZIN_SELF_HOSTED_BRANCH) &&
+      inputs.branch == vars.LINZIN_SELF_HOSTED_BRANCH &&
+      inputs.expected_sha != '' &&
+      inputs.expected_sha == github.sha
+    runs-on: [self-hosted, Windows, X64, linzin-v2-qa]
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      LINZIN_SELF_HOSTED_ENABLED: ${{ vars.LINZIN_SELF_HOSTED_ENABLED }}
+      LINZIN_SELF_HOSTED_REPOSITORY: ${{ vars.LINZIN_SELF_HOSTED_REPOSITORY }}
+      LINZIN_SELF_HOSTED_ACTOR: ${{ vars.LINZIN_SELF_HOSTED_ACTOR }}
+      LINZIN_SELF_HOSTED_BRANCH: ${{ vars.LINZIN_SELF_HOSTED_BRANCH }}
+      LINZIN_EXPECTED_BRANCH: ${{ inputs.branch }}
+      LINZIN_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      TEMP: 'D:\codex-tools\linzin-android\runner-QA\tmp'
+      TMP: 'D:\codex-tools\linzin-android\runner-QA\tmp'
+      GRADLE_USER_HOME: 'D:\codex-tools\linzin-android\runner-QA\toolchain\gradle-user-home'
+      ANDROID_USER_HOME: 'D:\codex-tools\linzin-android\runner-QA\toolchain\android-user-home'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate CI result parsers
+        run: ./scripts/test-self-hosted-parser.ps1
+      - name: Build and validate only the dedicated API 35 emulator
+        run: ./scripts/run-self-hosted-validation.ps1 -CollectBurnInScreenshots
+      - name: Upload bounded validation reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linzin-v2-self-hosted-validation
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            .local/self-hosted-validation/
+            app/build/reports/tests/
+            app/build/test-results/
+            app/build/reports/lint-results-debug.*

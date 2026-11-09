@@ -21,8 +21,8 @@
     <string name="layout_tip_title">多彩なレイアウト機能</string>
     <string name="layout_tip_desc">フルスクリーン時計のほか、「設定」から2分割レイアウトに切り替えることで、ミニカレンダーやリアルタイム天気を同時に確認できます！</string>
     <string name="layout_tip_single">シングルエリア</string>
-    <string name="layout_tip_dual_left">2分割 (左大 : 右小)</string>
-    <string name="layout_tip_dual_right">2分割 (左小 : 右大)</string>
+    <string name="layout_tip_dual_left">2分割（時計を左側に固定）</string>
+    <string name="layout_tip_dual_right">2分割（時計を右側に固定）</string>
 
     <!-- 非摺疊裝置彩蛋與提示 -->
     <string name="btn_not_foldable">折りたたみ端末ではない？</string>
@@ -42,8 +42,8 @@
     <string name="settings_title">時計設定</string>
     <string name="layout_section_title">画面レイアウト</string>
     <string name="layout_single">シングルモード (100% 全画面)</string>
-    <string name="layout_dual_left">2分割モード (左大 70% : 右小 30%)</string>
-    <string name="layout_dual_right">2分割モード (左小 30% : 右大 70%)</string>
+    <string name="layout_dual_left">2分割（時計を左側に固定・ドラッグで幅を調整）</string>
+    <string name="layout_dual_right">2分割（時計を右側に固定・ドラッグで幅を調整）</string>
 
     <!-- 設定對話框：天氣資訊設定 -->
     <string name="pref_weather_title">現在地の天気を有効化</string>
@@ -93,7 +93,7 @@
     <string name="pref_brightness_desc_auto">システムの自動調整に従う</string>
     <string name="brightness_value">明るさ</string>
     <string name="pref_timeout_title">無操作時の自動画面オフ</string>
-    <string name="pref_timeout_desc">設定時間がシステムの画面消灯時間より短い場合、カウントダウン後に省電力の「疑似スリープ（黒画面）」に入ります。画面タップで復帰します。</string>
+    <string name="pref_timeout_desc">設定した無操作時間が経過すると、ロック専用のデバイス管理者権限が有効な場合は、端末をロックして画面を消灯します。この権限を利用できない場合は時計を終了し、その後はシステム設定の待ち時間が経過すると画面が消灯します。</string>
     <string name="timeout_1m">1 分</string>
     <string name="timeout_3m">3 分</string>
     <string name="timeout_10m">10 分</string>
@@ -110,8 +110,8 @@
     <string name="layout_switch_dialog_title">2分割レイアウトの推奨</string>
     <string name="layout_switch_dialog_desc">現在「シングル全画面」時計モードです。天気やカレンダー情報は「2分割」モードのサイドエリアでのみ表示されます。\n\n2分割レイアウトに切り替えますか？</string>
     <string name="layout_switch_opt_no">いいえ、シングルを維持</string>
-    <string name="layout_switch_opt_left">はい (左大 : 右小)</string>
-    <string name="layout_switch_opt_right">はい (右大 : 左小)</string>
+    <string name="layout_switch_opt_left">はい（時計を左側に固定）</string>
+    <string name="layout_switch_opt_right">はい（時計を右側に固定）</string>
 
     <!-- 更新檢查相關 -->
     <string name="toast_update_available">新しいバージョン (%1$s) が見つかりました！設定の下部から更新してください</string>
@@ -125,4 +125,6 @@
     <string name="settings_update_available_title">新バージョンが利用可能です：%1$s</string>
     <string name="settings_update_available_desc">GitHubで新しいリリースが公開されています。アップデートをお勧めします。</string>
     <string name="settings_btn_go_to_github_releases">GitHub Releases でダウンロード</string>
+    <string name="settings_update_failed">更新を確認できませんでした。ネットワーク接続を確認してください。</string>
+    <string name="settings_update_current">最新バージョン（%1$s）を使用しています。</string>
 </resources>

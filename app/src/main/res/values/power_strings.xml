@@ -1,0 +1,8 @@
+<resources>
+    <string name="low_battery_title">Low battery protection</string>
+    <string name="low_battery_description">Only while unplugged. Dim temporarily caps the clock brightness at 8%; charging or recovering the battery restores your brightness choice. Exit closes the clock and stops monitoring until you reopen it.</string>
+    <string name="low_battery_off">Off</string>
+    <string name="low_battery_dim">Dim the clock</string>
+    <string name="low_battery_exit">Exit the clock</string>
+    <string name="low_battery_threshold">Trigger below %1$d%% battery</string>
+</resources>

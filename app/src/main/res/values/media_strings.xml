@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_notification_listener_label">Desk clock media access</string>
+    <string name="media_access_settings_title">Media notification access</string>
+    <string name="media_access_settings_summary">Allow notification access to display and control active media sessions. Notification contents are not stored.</string>
+    <string name="media_access_open_settings">Open notification access settings</string>
+    <string name="media_permission_required">Media access is off</string>
+    <string name="media_permission_settings_hint">Allow notification access to show your music and playback controls here.</string>
+    <string name="media_permission_unlock_hint">Unlock your device before opening notification access settings.</string>
+    <string name="media_permission_ui_unlock_hint">Turn off UI Lock before opening notification access settings.</string>
+    <string name="media_connecting">Connecting to media sessions…</string>
+    <string name="media_unavailable">Media sessions are temporarily unavailable</string>
+    <string name="media_no_session">No active media session</string>
+    <string name="media_no_session_hint">Start playback in a media app to show it here.</string>
+    <string name="media_starting">Media</string>
+    <string name="media_no_artwork">No artwork</string>
+    <string name="media_unknown_title">Unknown title</string>
+    <string name="media_unknown_artist">Unknown artist</string>
+    <string name="media_play">Play</string>
+    <string name="media_pause">Pause</string>
+    <string name="media_toggle">Toggle play or pause</string>
+    <string name="media_previous">Previous track</string>
+    <string name="media_next">Next track</string>
+    <string name="media_seek">Playback position</string>
+    <string name="media_unknown_time">–:––</string>
+    <string name="media_progress_description">%1$s of %2$s</string>
+    <string name="media_controls_locked">Unlock to control playback</string>
+    <string name="media_controls_ui_locked">Playback controls are locked</string>
+    <string name="media_controls_unavailable">No supported playback controls</string>
+    <string name="media_state_playing">Playing</string>
+    <string name="media_state_paused">Paused</string>
+    <string name="media_state_buffering">Buffering…</string>
+    <string name="media_state_connecting">Connecting…</string>
+    <string name="media_state_stopped">Stopped</string>
+    <string name="media_state_error">Playback unavailable</string>
+    <string name="media_state_idle">Ready</string>
+</resources>

@@ -1,10 +1,21 @@
 package com.linzin.linzindeskclock
 
+import com.linzin.linzindeskclock.ui.DeskClockScreen
+import com.linzin.linzindeskclock.settings.AutoClockSetupDialog
+import com.linzin.linzindeskclock.calendar.UpcomingCalendarEvent
+import com.linzin.linzindeskclock.ui.SideDateWidget
 import android.Manifest
-import android.annotation.SuppressLint
+import android.app.KeyguardManager
+import android.app.NotificationManager
+import android.os.PowerManager
+import android.os.Handler
+import android.os.Looper
+import androidx.lifecycle.Lifecycle
+import com.linzin.linzindeskclock.autostart.*
+import com.linzin.linzindeskclock.power.shouldPauseAutoClockForLowBattery
+import com.linzin.linzindeskclock.service.AutoClockService
 import android.app.Activity
 import android.content.BroadcastReceiver
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -17,25 +28,23 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.location.Geocoder
-import android.location.Location
-import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.CalendarContract
 import android.provider.Settings
 import android.util.Log
 import android.view.Window
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatDelegate
+import com.linzin.linzindeskclock.display.preferredClockOrientation
+import com.linzin.linzindeskclock.localization.formatClockDate
+import com.linzin.linzindeskclock.localization.formatForecastHour
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -95,6 +104,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -135,18 +145,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import java.net.HttpURLConnection
-import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
-import kotlin.coroutines.resume
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -156,16 +161,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 
 // ==========================================
 // 1. 主題配色與資料結構
 // ==========================================
 
-private val DeskClockColorScheme = darkColorScheme(
+internal val DeskClockColorScheme = darkColorScheme(
     primary = Color(0xFF81C7D4),
     onPrimary = Color(0xFF041E49),
     primaryContainer = Color(0xFF1E3A45),
@@ -200,166 +202,9 @@ data class WeatherInfo(
 
 data class BatteryState(
     val level: Int = 100,
-    val isCharging: Boolean = false
+    val isCharging: Boolean = false,
+    val isPowered: Boolean = false
 )
-
-data class UpcomingCalendarEvent(
-    val title: String,
-    val timeLabel: String
-)
-
-fun setAppLanguage(context: Context, languageCode: String) {
-    // 1. 存入 SharedPreferences 保險
-    context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
-        .edit()
-        .putString("pref_app_language", languageCode)
-        .apply()
-
-    // 2. 調用官方相容 API
-    val appLocale: LocaleListCompat = if (languageCode == "system") {
-        LocaleListCompat.getEmptyLocaleList()
-    } else {
-        LocaleListCompat.forLanguageTags(languageCode)
-    }
-    AppCompatDelegate.setApplicationLocales(appLocale)
-}
-
-fun getCurrentLanguageTag(context: Context): String {
-    // 優先讀取保存的設定
-    val saved = context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
-        .getString("pref_app_language", null)
-    if (saved != null) return saved
-
-    val currentLocales = AppCompatDelegate.getApplicationLocales()
-    return if (currentLocales.isEmpty) {
-        "system"
-    } else {
-        currentLocales.get(0)?.toLanguageTag() ?: "system"
-    }
-}
-
-/**
- * 查詢未來 48 小時內的日曆行程（支援單日、跨日全天行程與進行中事件）
- */
-fun fetchUpcomingCalendarEvents(context: Context): List<UpcomingCalendarEvent> {
-    val hasPermission = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.READ_CALENDAR
-    ) == PackageManager.PERMISSION_GRANTED
-    if (!hasPermission) return emptyList()
-
-    val eventList = mutableListOf<UpcomingCalendarEvent>()
-    val now = System.currentTimeMillis()
-    val endWindow = now + (48 * 60 * 60 * 1000L)
-
-    val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
-    ContentUris.appendId(builder, now)
-    ContentUris.appendId(builder, endWindow)
-
-    val projection = arrayOf(
-        CalendarContract.Instances.TITLE,
-        CalendarContract.Instances.BEGIN,
-        CalendarContract.Instances.END,
-        CalendarContract.Instances.ALL_DAY
-    )
-    val sortOrder = "${CalendarContract.Instances.BEGIN} ASC"
-
-    try {
-        context.contentResolver.query(
-            builder.build(),
-            projection,
-            null,
-            null,
-            sortOrder
-        )?.use { cursor ->
-            val titleIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.TITLE)
-            val beginIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.BEGIN)
-            val endIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.END)
-            val allDayIdx = cursor.getColumnIndexOrThrow(CalendarContract.Instances.ALL_DAY)
-
-            val timeFormat = SimpleDateFormat("H:mm", Locale.US)
-            val dayFormat = SimpleDateFormat("M/d", Locale.US)
-
-            val nowCal = Calendar.getInstance().apply { timeInMillis = now }
-            val currentYear = nowCal.get(Calendar.YEAR)
-            val currentMonth = nowCal.get(Calendar.MONTH)
-            val currentDay = nowCal.get(Calendar.DAY_OF_MONTH)
-            val currentDayOfYear = nowCal.get(Calendar.DAY_OF_YEAR)
-
-            // 本地今天 00:00:00 的時間戳
-            val todayStartLocal = Calendar.getInstance().apply {
-                clear()
-                set(currentYear, currentMonth, currentDay, 0, 0, 0)
-            }.timeInMillis
-
-            // Android 全天行程在底層統一以 UTC 00:00:00 記錄，計算對應的 UTC 今日時間點
-            val todayUtcMidnight = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                clear()
-                set(currentYear, currentMonth, currentDay, 0, 0, 0)
-            }.timeInMillis
-
-            while (cursor.moveToNext() && eventList.size < 3) {
-                val title = cursor.getString(titleIdx) ?: context.getString(R.string.event_untitled)
-                val beginMillis = cursor.getLong(beginIdx)
-                val endMillis = cursor.getLong(endIdx)
-                val isAllDay = cursor.getInt(allDayIdx) == 1
-
-                if (isAllDay) {
-                    // 全天行程的 endMillis 是結束日的隔天 00:00 UTC（Exclusive）
-                    // 若結束時間小於等於今日起點，代表昨天或更早以前就結束了，跳過
-                    if (endMillis <= todayUtcMidnight) {
-                        continue
-                    }
-
-                    // 只要「開始時間 <= 今天」且「結束時間 > 今天」，代表今天正在該多日行程中
-                    val isCoveringToday = (beginMillis <= todayUtcMidnight && endMillis > todayUtcMidnight)
-
-                    val label = if (isCoveringToday) {
-                        context.getString(R.string.event_all_day_today)
-                    } else {
-                        dayFormat.timeZone = TimeZone.getTimeZone("UTC")
-                        "${dayFormat.format(Date(beginMillis))} ${context.getString(R.string.event_all_day)}"
-                    }
-
-                    eventList.add(UpcomingCalendarEvent(title = title, timeLabel = label))
-                } else {
-                    // 非全天一般行程：已結束則跳過
-                    if (endMillis <= now) {
-                        continue
-                    }
-
-                    val eventCal = Calendar.getInstance().apply { timeInMillis = beginMillis }
-                    val isToday = (eventCal.get(Calendar.DAY_OF_YEAR) == currentDayOfYear &&
-                            eventCal.get(Calendar.YEAR) == currentYear)
-
-                    dayFormat.timeZone = TimeZone.getDefault()
-                    timeFormat.timeZone = TimeZone.getDefault()
-
-                    val label = when {
-                        // 跨天且今天仍在進行中的行程
-                        beginMillis < todayStartLocal && endMillis > now -> {
-                            context.getString(R.string.event_all_day_today)
-                        }
-                        // 今天內的行程顯示具體開始時間（如 14:00）
-                        isToday -> {
-                            timeFormat.format(Date(beginMillis))
-                        }
-                        // 明後天的行程顯示日期與時間（如 11/9 10:00）
-                        else -> {
-                            "${dayFormat.format(Date(beginMillis))} ${timeFormat.format(Date(beginMillis))}"
-                        }
-                    }
-
-                    eventList.add(UpcomingCalendarEvent(title = title, timeLabel = label))
-                }
-            }
-        }
-    } catch (e: Exception) {
-        Log.e("DeskClockCalendar", "Error querying calendar instances", e)
-    }
-
-    return eventList
-}
 
 /**
  * 非同步發送 Shell 指令至系統（如調用 cmd device_state）
@@ -376,232 +221,9 @@ fun executeShellCommand(command: String) {
     }
 }
 
-/**
- * 主動獲取最新定位（優先嘗試高時效快取，若無則在 Android 11+ 主動單次定位）
- */
-@SuppressLint("MissingPermission")
-suspend fun fetchBestLocation(context: Context): Location? = withContext(Dispatchers.IO) {
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        ?: return@withContext null
-
-    // 1. 抓取快取
-    val lastLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        ?: locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-        ?: locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
-
-    // 若快取在 10 分鐘內，直接視為有效位置返回以節省電量
-    if (lastLocation != null && (System.currentTimeMillis() - lastLocation.time) < 10 * 60 * 1000L) {
-        return@withContext lastLocation
-    }
-
-    // 2. Android 11+ (API 30+) 發起主動單次定位（加 5 秒逾時保護，避免無衛星時卡住）
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        try {
-            withTimeoutOrNull(5000L) {
-                suspendCancellableCoroutine<Location?> { cont ->
-                    val cancellationSignal = android.os.CancellationSignal()
-                    cont.invokeOnCancellation { cancellationSignal.cancel() }
-
-                    val provider = if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                        LocationManager.NETWORK_PROVIDER
-                    } else {
-                        LocationManager.GPS_PROVIDER
-                    }
-
-                    locationManager.getCurrentLocation(
-                        provider,
-                        cancellationSignal,
-                        ContextCompat.getMainExecutor(context)
-                    ) { loc ->
-                        if (cont.isActive) {
-                            cont.resume(loc ?: lastLocation)
-                        }
-                    }
-                }
-            } ?: lastLocation
-        } catch (e: Exception) {
-            lastLocation
-        }
-    } else {
-        lastLocation
-    }
-}
-
-/**
- * 整合抓取定位、反向地理編碼與 Open-Meteo 天氣
- */
-suspend fun fetchAndApplyWeather(
-    context: Context,
-    currentLocationStr: String,
-    onResult: (WeatherInfo?) -> Unit
-) = withContext(Dispatchers.IO) {
-    try {
-        val location = fetchBestLocation(context)
-        val lat = location?.latitude ?: 24.838
-        val lon = location?.longitude ?: 121.017
-
-        // 預設採用「目前位置」，即便 Geocoder 逾時或失敗也不會死板卡在「新竹市」
-        var detectedCity = currentLocationStr
-        try {
-            val geocoder = Geocoder(context, Locale.getDefault())
-            val addresses = geocoder.getFromLocation(lat, lon, 1)
-            if (!addresses.isNullOrEmpty()) {
-                val addr = addresses[0]
-                detectedCity = addr.locality
-                    ?: addr.subAdminArea
-                            ?: addr.adminArea
-                            ?: currentLocationStr
-            }
-        } catch (e: Exception) {
-            detectedCity = currentLocationStr
-        }
-
-        val data = fetchOpenMeteoWeather(lat, lon, detectedCity)
-        withContext(Dispatchers.Main) {
-            onResult(data)
-        }
-    } catch (e: Exception) {
-        Log.e("DeskClockWeather", "Failed to fetch and apply weather", e)
-    }
-}
-
-/**
- * 查詢 Open-Meteo 天氣預報 API 並解析
- */
-suspend fun fetchOpenMeteoWeather(lat: Double, lon: Double, cityName: String): WeatherInfo? = withContext(Dispatchers.IO) {
-    try {
-        val urlStr = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&timezone=auto"
-        val connection = URL(urlStr).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 8000
-        connection.readTimeout = 8000
-
-        val responseText = connection.inputStream.bufferedReader().use { it.readText() }
-        val root = JSONObject(responseText)
-
-        val currentObj = root.getJSONObject("current")
-        val currentTemp = currentObj.getDouble("temperature_2m").toFloat()
-        val currentCode = currentObj.getInt("weather_code")
-
-        val hourlyObj = root.getJSONObject("hourly")
-        val times = hourlyObj.getJSONArray("time")
-        val temps = hourlyObj.getJSONArray("temperature_2m")
-        val codes = hourlyObj.getJSONArray("weather_code")
-
-        val nowCal = Calendar.getInstance()
-        val currentHourInt = nowCal.get(Calendar.HOUR_OF_DAY)
-
-        val hourlyResult = mutableListOf<HourlyWeather>()
-        val inFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US)
-
-        for (i in 0 until times.length()) {
-            val tStr = times.getString(i)
-            val date = inFormat.parse(tStr)
-            if (date != null) {
-                val cal = Calendar.getInstance().apply { time = date }
-                if (cal.get(Calendar.HOUR_OF_DAY) >= currentHourInt && cal.get(Calendar.DAY_OF_YEAR) == nowCal.get(Calendar.DAY_OF_YEAR)) {
-                    val hour = cal.get(Calendar.HOUR_OF_DAY)
-                    val t = temps.getDouble(i).toFloat()
-                    val c = codes.getInt(i)
-                    hourlyResult.add(HourlyWeather(hourOfDay = hour, tempC = t, weatherCode = c))
-                    if (hourlyResult.size == 4) break
-                }
-            }
-        }
-
-        var fallbackIdx = 0
-        while (hourlyResult.size < 4 && fallbackIdx < times.length()) {
-            val tStr = times.getString(fallbackIdx)
-            val date = inFormat.parse(tStr)
-            if (date != null) {
-                val cal = Calendar.getInstance().apply { time = date }
-                val hour = cal.get(Calendar.HOUR_OF_DAY)
-                val t = temps.getDouble(fallbackIdx).toFloat()
-                val c = codes.getInt(fallbackIdx)
-                if (hourlyResult.none { it.hourOfDay == hour }) {
-                    hourlyResult.add(HourlyWeather(hourOfDay = hour, tempC = t, weatherCode = c))
-                }
-            }
-            fallbackIdx++
-        }
-
-        WeatherInfo(
-            cityName = cityName,
-            currentTempC = currentTemp,
-            currentWeatherCode = currentCode,
-            hourlyList = hourlyResult
-        )
-    } catch (e: Exception) {
-        Log.e("DeskClockWeather", "Failed to fetch Open-Meteo", e)
-        null
-    }
-}
-
 fun formatTemp(celsius: Float, isFahrenheit: Boolean): String {
     val temp = if (isFahrenheit) (celsius * 9f / 5f + 32f).roundToInt() else celsius.roundToInt()
     return "$temp°"
-}
-
-data class AppUpdateInfo(
-    val hasUpdate: Boolean,
-    val latestVersion: String,
-    val releaseUrl: String = "https://github.com/linzin86/LinzinDeskClock/releases"
-)
-
-/**
- * 比較兩組版本號字串 (如 1.0.1 vs 1.0.0)
- */
-fun isVersionNewer(latest: String, current: String): Boolean {
-    val lParts = latest.split(".").mapNotNull { it.toIntOrNull() }
-    val cParts = current.split(".").mapNotNull { it.toIntOrNull() }
-    val maxLen = maxOf(lParts.size, cParts.size)
-    for (i in 0 until maxLen) {
-        val l = lParts.getOrElse(i) { 0 }
-        val c = cParts.getOrElse(i) { 0 }
-        if (l > c) return true
-        if (l < c) return false
-    }
-    return false
-}
-
-/**
- * 查詢 GitHub 最新 Release 版本資訊
- */
-suspend fun checkForAppUpdate(currentVersionName: String): AppUpdateInfo? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("https://api.github.com/repos/linzin86/LinzinDeskClock/releases/latest")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 6000
-            readTimeout = 6000
-            // GitHub API 規定必須提供 User-Agent，否則會回傳 403 拒絕請求
-            setRequestProperty("User-Agent", "LinzinDeskClock-Android")
-            setRequestProperty("Accept", "application/vnd.github.v3+json")
-        }
-
-        if (conn.responseCode == 200) {
-            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-            val root = JSONObject(responseText)
-            val tagName = root.optString("tag_name", "")
-            val htmlUrl = root.optString("html_url", "https://github.com/linzin86/LinzinDeskClock/releases")
-
-            val cleanLatest = tagName.trim().removePrefix("v").removePrefix("V")
-            val cleanCurrent = currentVersionName.trim().removePrefix("v").removePrefix("V")
-
-            val isNewer = isVersionNewer(cleanLatest, cleanCurrent)
-
-            AppUpdateInfo(
-                hasUpdate = isNewer,
-                latestVersion = tagName,
-                releaseUrl = if (htmlUrl.isNotBlank()) htmlUrl else "https://github.com/linzin86/LinzinDeskClock/releases"
-            )
-        } else {
-            null
-        }
-    } catch (e: Exception) {
-        Log.e("DeskClockUpdate", "Check update failed", e)
-        null
-    }
 }
 
 // ==========================================
@@ -678,7 +300,7 @@ fun rememberBatteryState(): BatteryState {
                     val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                             status == BatteryManager.BATTERY_STATUS_FULL
                     val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else 100
-                    batteryState = BatteryState(level = pct, isCharging = isCharging)
+                    batteryState = BatteryState(level = pct, isCharging = isCharging, isPowered = it.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
                 }
             }
         }
@@ -691,7 +313,7 @@ fun rememberBatteryState(): BatteryState {
             val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
             val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else 100
-            batteryState = BatteryState(level = pct, isCharging = isCharging)
+            batteryState = BatteryState(level = pct, isCharging = isCharging, isPowered = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0)
         }
 
         onDispose {
@@ -1851,811 +1473,6 @@ fun NonFoldableDialog(
     }
 }
 
-@Composable
-fun ClockSettingsDialog(
-    is24Hour: Boolean,
-    on24HourChange: (Boolean) -> Unit,
-    showBattery: Boolean,
-    onShowBatteryChange: (Boolean) -> Unit,
-    showCornerDate: Boolean,
-    onShowCornerDateChange: (Boolean) -> Unit,
-    showHingeAngle: Boolean,
-    onShowHingeAngleChange: (Boolean) -> Unit,
-    hasHingeSensor: Boolean = true,
-    showCalendarEvents: Boolean,
-    onShowCalendarEventsChange: (Boolean) -> Unit,
-    manualBrightness: Boolean,
-    onManualBrightnessChange: (Boolean) -> Unit,
-    brightnessValue: Float,
-    onBrightnessValueChange: (Float) -> Unit,
-    timeoutMillis: Long,
-    onTimeoutChange: (Long) -> Unit,
-    layoutMode: ClockLayoutMode,
-    onLayoutModeChange: (ClockLayoutMode) -> Unit,
-    weatherEnabled: Boolean,
-    onWeatherEnabledChange: (Boolean) -> Unit,
-    isFahrenheit: Boolean,
-    onFahrenheitChange: (Boolean) -> Unit,
-    burnInProtectionEnabled: Boolean,
-    onBurnInProtectionChange: (Boolean) -> Unit,
-    flipScreen180: Boolean,
-    onFlipScreen180Change: (Boolean) -> Unit,
-    onOpenTutorial: () -> Unit,
-    updateInfo: AppUpdateInfo?,
-    isCheckingUpdate: Boolean,
-    onCheckUpdateClick: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var showSuggestDualDialog by remember { mutableStateOf(false) }
-
-    val handleWeatherToggle: (Boolean) -> Unit = { targetState ->
-        onWeatherEnabledChange(targetState)
-        if (targetState && layoutMode == ClockLayoutMode.SINGLE) {
-            showSuggestDualDialog = true
-        }
-    }
-
-    val handleCalendarToggle: (Boolean) -> Unit = { targetState ->
-        onShowCalendarEventsChange(targetState)
-        if (targetState && layoutMode == ClockLayoutMode.SINGLE) {
-            showSuggestDualDialog = true
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .fillMaxHeight(0.88f),
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF1E1E22)
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 60.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_title),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 1. 區塊版面模式選擇
-                    Text(
-                        text = stringResource(R.string.layout_section_title),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
-                    )
-
-                    val layoutOptions = listOf(
-                        ClockLayoutMode.SINGLE to stringResource(R.string.layout_single),
-                        ClockLayoutMode.DUAL_LEFT_LARGE to stringResource(R.string.layout_dual_left),
-                        ClockLayoutMode.DUAL_RIGHT_LARGE to stringResource(R.string.layout_dual_right)
-                    )
-
-                    layoutOptions.forEach { (mode, label) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onLayoutModeChange(mode) }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = (layoutMode == mode),
-                                onClick = { onLayoutModeChange(mode) }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = label,
-                                fontSize = 16.sp,
-                                color = if (layoutMode == mode) Color.White else Color.Gray
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    val context = LocalContext.current
-                    var currentLang by remember { mutableStateOf(getCurrentLanguageTag(context)) }
-
-                    Text(
-                        text = stringResource(R.string.pref_language_title),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
-                    )
-
-                    val languageOptions = listOf(
-                        "system" to stringResource(R.string.lang_follow_system),
-                        "zh-TW" to stringResource(R.string.lang_zh_tw),
-                        "zh-CN" to stringResource(R.string.lang_zh_cn),
-                        "ja" to stringResource(R.string.lang_ja),
-                        "en" to stringResource(R.string.lang_en)
-                    )
-
-                    languageOptions.forEach { (code, label) ->
-                        val isSelected = when (code) {
-                            "system" -> currentLang == "system"
-                            "zh-TW" -> currentLang.startsWith("zh-TW") || currentLang.startsWith("zh-Hant")
-                            "zh-CN" -> currentLang.startsWith("zh-CN") || currentLang.startsWith("zh-Hans")
-                            "ja" -> currentLang.startsWith("ja")
-                            "en" -> currentLang.startsWith("en")
-                            else -> false
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    currentLang = code
-                                    setAppLanguage(context, code)
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = {
-                                    currentLang = code
-                                    setAppLanguage(context, code)
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = label,
-                                fontSize = 16.sp,
-                                color = if (isSelected) Color.White else Color.Gray
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 2. 當地天氣資訊
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { handleWeatherToggle(!weatherEnabled) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_weather_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_weather_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = weatherEnabled,
-                            onCheckedChange = null
-                        )
-                    }
-
-                    if (weatherEnabled) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onFahrenheitChange(!isFahrenheit) }
-                                .padding(vertical = 8.dp, horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.temp_unit_switch),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = if (isFahrenheit) stringResource(R.string.temp_unit_f) else stringResource(R.string.temp_unit_c),
-                                    fontSize = 13.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "°C",
-                                    color = if (!isFahrenheit) Color(0xFF5DAC81) else Color(0xFF75757F),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                Switch(
-                                    checked = isFahrenheit,
-                                    onCheckedChange = null,
-                                    colors = SwitchDefaults.colors(
-                                        checkedTrackColor = Color(0xFF81C7D4),
-                                        checkedThumbColor = Color(0xFF041E49),
-                                        checkedBorderColor = Color(0xFF81C7D4),
-                                        uncheckedTrackColor = Color(0xFF5DAC81),
-                                        uncheckedThumbColor = Color(0xFF041E49),
-                                        uncheckedBorderColor = Color(0xFF5DAC81)
-                                    )
-                                )
-
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                Text(
-                                    text = "°F",
-                                    color = if (isFahrenheit) Color(0xFF81C7D4) else Color(0xFF75757F),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 3. 行事曆近期行程
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { handleCalendarToggle(!showCalendarEvents) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_calendar_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_calendar_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = showCalendarEvents,
-                            onCheckedChange = null
-                        )
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 4. 12 / 24 小時制切換
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { on24HourChange(!is24Hour) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_24h_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = if (is24Hour) stringResource(R.string.pref_24h_desc_on) else stringResource(R.string.pref_24h_desc_off),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(checked = is24Hour, onCheckedChange = null)
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 5. 顯示元素開關 (電量、角落日期、轉軸角度)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onShowBatteryChange(!showBattery) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_battery_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_battery_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(checked = showBattery, onCheckedChange = null)
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onShowCornerDateChange(!showCornerDate) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_corner_date_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_corner_date_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(checked = showCornerDate, onCheckedChange = null)
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .then(
-                                if (hasHingeSensor) {
-                                    Modifier.clickable { onShowHingeAngleChange(!showHingeAngle) }
-                                } else Modifier
-                            )
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_hinge_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (hasHingeSensor) Color.White else Color(0xFF6E6E78)
-                            )
-                            Text(
-                                text = if (hasHingeSensor) {
-                                    stringResource(R.string.pref_hinge_desc)
-                                } else {
-                                    stringResource(R.string.pref_hinge_unsupported)
-                                },
-                                fontSize = 13.sp,
-                                color = if (hasHingeSensor) Color.Gray else Color(0xFFE57373)
-                            )
-                        }
-                        Switch(
-                            checked = if (hasHingeSensor) showHingeAngle else false,
-                            onCheckedChange = null,
-                            enabled = hasHingeSensor
-                        )
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 6. 防烙印開關
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onBurnInProtectionChange(!burnInProtectionEnabled) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_burn_in_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_burn_in_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = burnInProtectionEnabled,
-                            onCheckedChange = null
-                        )
-                    }
-
-                    // 畫面 180° 反轉開關（針對 Moto 等外螢幕倒置設備）
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onFlipScreen180Change(!flipScreen180) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_flip_180_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_flip_180_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = flipScreen180,
-                            onCheckedChange = null
-                        )
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 7. 螢幕亮度手動控制
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onManualBrightnessChange(!manualBrightness) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_brightness_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = if (manualBrightness) stringResource(R.string.pref_brightness_desc_manual) else stringResource(R.string.pref_brightness_desc_auto),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(checked = manualBrightness, onCheckedChange = null)
-                    }
-
-                    if (manualBrightness) {
-                        Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.brightness_value),
-                                    color = Color.LightGray,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = "${(brightnessValue * 100).toInt()}%",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Slider(
-                                value = brightnessValue,
-                                onValueChange = onBrightnessValueChange,
-                                valueRange = 0.05f..1.0f
-                            )
-                        }
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 8. 螢幕關閉逾時
-                    Text(
-                        text = stringResource(R.string.pref_timeout_title),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
-                    )
-
-                    Text(
-                        text = stringResource(R.string.pref_timeout_desc),
-                        fontSize = 12.sp,
-                        color = Color(0xFF9E9EA8),
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    val timeoutOptions = listOf(
-                        60_000L to stringResource(R.string.timeout_1m),
-                        180_000L to stringResource(R.string.timeout_3m),
-                        600_000L to stringResource(R.string.timeout_10m),
-                        1_800_000L to stringResource(R.string.timeout_30m),
-                        3_600_000L to stringResource(R.string.timeout_1h),
-                        10_800_000L to stringResource(R.string.timeout_3h),
-                        -1L to stringResource(R.string.timeout_never)
-                    )
-
-                    timeoutOptions.forEach { (millis, label) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onTimeoutChange(millis) }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = (timeoutMillis == millis),
-                                onClick = { onTimeoutChange(millis) }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = label,
-                                fontSize = 16.sp,
-                                color = if (timeoutMillis == millis) Color.White else Color.Gray
-                            )
-                        }
-                    }
-
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 9. 查看手勢操作指南
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onOpenTutorial() }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.pref_tutorial_title),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = stringResource(R.string.pref_tutorial_desc),
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Text(
-                            text = "➔",
-                            color = Color(0xFF81C7D4),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(end = 4.dp)
-                        )
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
-
-                    // 10. 軟體版本與更新專區
-                    val uriHandler = LocalUriHandler.current
-                    val pInfo = remember(context) {
-                        try {
-                            context.packageManager.getPackageInfo(context.packageName, 0)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
-                    val versionName = pInfo?.versionName ?: "1.0.0"
-                    val versionCode = remember(context) {
-                        try {
-                            if (pInfo != null) {
-                                androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pInfo)
-                            } else 1L
-                        } catch (e: Exception) {
-                            1L
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.settings_version_title),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.settings_version_current, versionName, versionCode.toString()),
-                                    fontSize = 13.sp,
-                                    color = Color.Gray
-                                )
-                            }
-
-                            // 手動檢查按鈕
-                            Surface(
-                                onClick = {
-                                    if (!isCheckingUpdate) {
-                                        onCheckUpdateClick()
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF2C2C34),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.padding(horizontal = 14.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (isCheckingUpdate) {
-                                            stringResource(R.string.settings_btn_checking_update)
-                                        } else {
-                                            stringResource(R.string.settings_btn_check_update)
-                                        },
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = if (isCheckingUpdate) Color.Gray else Color(0xFF81C7D4)
-                                    )
-                                }
-                            }
-                        }
-
-                        // 如果有檢查到新版本，展開亮色提醒橫幅與直連下載按鈕
-                        if (updateInfo?.hasUpdate == true) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFF1E3A45),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF81C7D4))
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "🚀",
-                                            fontSize = 16.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = stringResource(R.string.settings_update_available_title, updateInfo.latestVersion),
-                                            color = Color.White,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    Text(
-                                        text = stringResource(R.string.settings_update_available_desc),
-                                        color = Color(0xFFC4C4CC),
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 17.sp
-                                    )
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    Surface(
-                                        onClick = {
-                                            uriHandler.openUri(updateInfo.releaseUrl)
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = Color(0xFF81C7D4),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(38.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = stringResource(R.string.settings_btn_go_to_github_releases),
-                                                color = Color(0xFF041E49),
-                                                fontSize = 13.5.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Surface(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFF5DAC81),
-                    shadowElevation = 6.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(20.dp)
-                        .size(56.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Canvas(modifier = Modifier.size(24.dp)) {
-                            val strokeWidth = 3.5.dp.toPx()
-                            val checkColor = Color(0xFF041E49)
-
-                            val p1 = Offset(size.width * 0.20f, size.height * 0.52f)
-                            val p2 = Offset(size.width * 0.42f, size.height * 0.74f)
-                            val p3 = Offset(size.width * 0.82f, size.height * 0.28f)
-
-                            drawLine(
-                                color = checkColor,
-                                start = p1,
-                                end = p2,
-                                strokeWidth = strokeWidth,
-                                cap = StrokeCap.Round
-                            )
-                            drawLine(
-                                color = checkColor,
-                                start = p2,
-                                end = p3,
-                                strokeWidth = strokeWidth,
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
-                }
-
-                if (showSuggestDualDialog) {
-                    SwitchToDualLayoutDialog(
-                        onDismiss = { showSuggestDualDialog = false },
-                        onKeepSingle = {},
-                        onSelectLeftLarge = {
-                            onLayoutModeChange(ClockLayoutMode.DUAL_LEFT_LARGE)
-                        },
-                        onSelectRightLarge = {
-                            onLayoutModeChange(ClockLayoutMode.DUAL_RIGHT_LARGE)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
 // ==========================================
 // 6. 初始歡迎畫面 (直立、展開與小摺引導)
 // ==========================================
@@ -2679,6 +1496,8 @@ fun InitialScreen(
 
     val uriHandler = LocalUriHandler.current
     var showNonFoldableDialog by remember { mutableStateOf(false) }
+    var showAutoSetup by remember { mutableStateOf(false) }
+    if(showAutoSetup) AutoClockSetupDialog(hasHingeSensor=hasHingeSensor,onDismiss={ showAutoSetup=false })
 
     val toastLiarFoldableText = stringResource(R.string.toast_liar_foldable)
 
@@ -2720,6 +1539,9 @@ fun InitialScreen(
             contentAlignment = Alignment.Center
         ) {
             val isLandscape = maxWidth > maxHeight
+            androidx.compose.material3.TextButton(
+                onClick={ showAutoSetup=true },modifier=Modifier.align(Alignment.TopEnd).zIndex(1f)
+            ) { Text(stringResource(R.string.auto_setup)) }
 
             if (isLandscape) {
                 // 橫向佈局
@@ -2922,610 +1744,6 @@ fun InitialScreen(
 // ==========================================
 
 @Composable
-fun DeskClockScreen(
-    foldState: String = "--°",
-    targetStateId: String = "3",
-    hasHingeSensor: Boolean = true,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val activity = context as? Activity
-    val window = activity?.window
-
-    val defaultCityStr = stringResource(R.string.city_default)
-    val currentLocationStr = stringResource(R.string.current_location)
-
-    val prefs = remember { context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE) }
-
-    var flipScreen180 by remember {
-        mutableStateOf(prefs.getBoolean("pref_flip_screen_180", false))
-    }
-
-    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-
-    val currentVersionName = remember(context) {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
-        } catch (e: Exception) {
-            "1.0.0"
-        }
-    }
-
-    LaunchedEffect(flipScreen180) {
-        val currentActivity = activity ?: return@LaunchedEffect
-
-        if (flipScreen180) {
-            // 開啟反轉：獲取當前物理旋轉角度並轉向對立面，強制鎖定禁止自動旋轉
-            val displayRotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                currentActivity.display?.rotation ?: android.view.Surface.ROTATION_270
-            } else {
-                @Suppress("DEPRECATION")
-                currentActivity.windowManager.defaultDisplay.rotation
-            }
-
-            currentActivity.requestedOrientation = when (displayRotation) {
-                android.view.Surface.ROTATION_90 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
-                android.view.Surface.ROTATION_270 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            }
-        } else {
-            // 關閉反轉：恢復各機型的預設轉向邏輯 (直接在此判定品牌與長寬比，不依賴 MainActivity 私有變數)
-            val m = Build.MANUFACTURER.lowercase()
-            val b = Build.BRAND.lowercase()
-            val isMoto = m.contains("motorola") || m.contains("lenovo") || b.contains("motorola") || b.contains("moto")
-
-            val metrics = currentActivity.resources.displayMetrics
-            val maxDim = maxOf(metrics.widthPixels, metrics.heightPixels).toFloat()
-            val minDim = minOf(metrics.widthPixels, metrics.heightPixels).toFloat()
-            val isTall = (maxDim / minDim) >= 2.05f
-
-            currentActivity.requestedOrientation = if (isMoto || isTall) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        val info = checkForAppUpdate(currentVersionName)
-        if (info != null) {
-            updateInfo = info
-            if (info.hasUpdate) {
-                Toast.makeText(
-                    context,
-                    context.applicationContext.getString(R.string.toast_update_available, info.latestVersion),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
-
-    var burnInProtectionEnabled by remember {
-        mutableStateOf(prefs.getBoolean("pref_burn_in_enabled", true))
-    }
-    var showGestureTutorial by remember {
-        mutableStateOf(!prefs.getBoolean("pref_dismiss_gesture_tutorial", false))
-    }
-    var showLayoutTip by remember {
-        mutableStateOf(!prefs.getBoolean("pref_dismiss_layout_tip", false))
-    }
-    var isTutorialFromSettings by remember { mutableStateOf(false) }
-
-    var is24Hour by remember { mutableStateOf(prefs.getBoolean("pref_24_hour", false)) }
-    var showBattery by remember { mutableStateOf(prefs.getBoolean("pref_show_battery", true)) }
-    var showCornerDate by remember { mutableStateOf(prefs.getBoolean("pref_show_corner_date", true)) }
-    var showHingeAngle by remember { mutableStateOf(prefs.getBoolean("pref_show_hinge_angle", false)) }
-    var manualBrightness by remember { mutableStateOf(prefs.getBoolean("pref_manual_brightness", false)) }
-    var brightnessValue by remember { mutableFloatStateOf(prefs.getFloat("pref_brightness_val", 0.6f)) }
-    var timeoutMillis by remember { mutableLongStateOf(prefs.getLong("pref_timeout_millis", -1L)) }
-    var layoutMode by remember {
-        val savedModeStr = prefs.getString("pref_layout_mode", ClockLayoutMode.SINGLE.name)
-        val mode = try { ClockLayoutMode.valueOf(savedModeStr ?: ClockLayoutMode.SINGLE.name) } catch (e: Exception) { ClockLayoutMode.SINGLE }
-        mutableStateOf(mode)
-    }
-
-    var weatherEnabled by remember { mutableStateOf(prefs.getBoolean("pref_weather_enabled", false)) }
-    var isFahrenheit by remember { mutableStateOf(prefs.getBoolean("pref_is_fahrenheit", false)) }
-    var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
-
-    var showCalendarEvents by remember {
-        mutableStateOf(prefs.getBoolean("pref_show_calendar_events", false))
-    }
-    var calendarEventsList by remember { mutableStateOf<List<UpcomingCalendarEvent>>(emptyList()) }
-
-    val calendarPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        showCalendarEvents = isGranted
-        if (isGranted) {
-            calendarEventsList = fetchUpcomingCalendarEvents(context)
-        }
-    }
-
-    var isUiLocked by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(is24Hour, showBattery, showCornerDate, showHingeAngle, manualBrightness, brightnessValue, timeoutMillis, layoutMode, weatherEnabled, isFahrenheit, burnInProtectionEnabled, showCalendarEvents) {
-        prefs.edit()
-            .putBoolean("pref_24_hour", is24Hour)
-            .putBoolean("pref_show_battery", showBattery)
-            .putBoolean("pref_show_corner_date", showCornerDate)
-            .putBoolean("pref_show_hinge_angle", showHingeAngle)
-            .putBoolean("pref_manual_brightness", manualBrightness)
-            .putFloat("pref_brightness_val", brightnessValue)
-            .putLong("pref_timeout_millis", timeoutMillis)
-            .putString("pref_layout_mode", layoutMode.name)
-            .putBoolean("pref_weather_enabled", weatherEnabled)
-            .putBoolean("pref_is_fahrenheit", isFahrenheit)
-            .putBoolean("pref_burn_in_enabled", burnInProtectionEnabled)
-            .putBoolean("pref_show_calendar_events", showCalendarEvents)
-            .putBoolean("pref_flip_screen_180", flipScreen180)
-            .apply()
-    }
-
-    var showSettingsIcon by remember { mutableStateOf(false) }
-    var isSettingsOpen by remember { mutableStateOf(false) }
-    var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var isBurnInProtectionActive by remember { mutableStateOf(false) }
-    var isFakeSleeping by remember { mutableStateOf(false) }
-
-    val batteryState = rememberBatteryState()
-
-    val actualMainPageCount = 3
-    val actualSidePageCount = 2
-    val loopMultiplier = 10_000
-
-    val savedMainPage = remember { prefs.getInt("pref_main_page", 0).coerceIn(0, actualMainPageCount - 1) }
-    val savedSidePage = remember { prefs.getInt("pref_side_page", 0).coerceIn(0, actualSidePageCount - 1) }
-
-    val mainPagerState = rememberPagerState(
-        initialPage = (loopMultiplier / 2) * actualMainPageCount + savedMainPage,
-        pageCount = { loopMultiplier * actualMainPageCount }
-    )
-    val sidePagerState = rememberPagerState(
-        initialPage = (loopMultiplier / 2) * actualSidePageCount + savedSidePage,
-        pageCount = { loopMultiplier * actualSidePageCount }
-    )
-
-    LaunchedEffect(mainPagerState.settledPage) {
-        prefs.edit().putInt("pref_main_page", mainPagerState.settledPage % actualMainPageCount).apply()
-    }
-    LaunchedEffect(sidePagerState.settledPage) {
-        prefs.edit().putInt("pref_side_page", sidePagerState.settledPage % actualSidePageCount).apply()
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        weatherEnabled = granted
-    }
-
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, weatherEnabled, layoutMode) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-
-                // 當擁有權限、在雙區塊模式且功能已開啟但目前無資料時觸發刷新
-                if ((hasFine || hasCoarse) && weatherEnabled && layoutMode != ClockLayoutMode.SINGLE && weatherInfo == null) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        fetchAndApplyWeather(context, currentLocationStr) { data ->
-                            weatherInfo = data
-                        }
-                    }
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    // 天氣更新：僅在雙區塊模式且功能開啟時在背景輪詢以省電
-    LaunchedEffect(weatherEnabled, layoutMode) {
-        val isDualLayout = (layoutMode != ClockLayoutMode.SINGLE)
-
-        if (weatherEnabled && isDualLayout) {
-            val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-
-            if (hasFine || hasCoarse) {
-                while (true) {
-                    fetchAndApplyWeather(context, currentLocationStr) { data ->
-                        weatherInfo = data
-                    }
-                    delay(30 * 60 * 1000L)
-                }
-            } else {
-                locationPermissionLauncher.launch(
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                )
-            }
-        }
-    }
-
-    // 行程更新：僅在雙區塊模式且功能開啟時定時背景查詢
-    LaunchedEffect(showCalendarEvents, layoutMode) {
-        val isDualLayout = (layoutMode != ClockLayoutMode.SINGLE)
-
-        if (showCalendarEvents && isDualLayout) {
-            val hasCalPerm = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_CALENDAR
-            ) == PackageManager.PERMISSION_GRANTED
-
-            if (hasCalPerm) {
-                while (true) {
-                    calendarEventsList = fetchUpcomingCalendarEvents(context)
-                    delay(10 * 60 * 1000L)
-                }
-            } else {
-                calendarEventsList = emptyList()
-            }
-        } else if (!isDualLayout) {
-            // 單區塊模式暫停查詢
-        } else {
-            calendarEventsList = emptyList()
-        }
-    }
-
-    SystemBarsController(hideSystemBars = true)
-
-    LaunchedEffect(manualBrightness, brightnessValue, isFakeSleeping) {
-        window?.let { w ->
-            val layoutParams = w.attributes
-            layoutParams.screenBrightness = when {
-                isFakeSleeping -> 0.0f
-                manualBrightness -> brightnessValue.coerceIn(0.01f, 1f)
-                else -> WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-            }
-            w.attributes = layoutParams
-        }
-    }
-
-    LaunchedEffect(showSettingsIcon, lastInteractionTime) {
-        if (showSettingsIcon && !isSettingsOpen) {
-            delay(5000L)
-            showSettingsIcon = false
-        }
-    }
-
-    LaunchedEffect(lastInteractionTime, timeoutMillis) {
-        isBurnInProtectionActive = false
-        isFakeSleeping = false
-
-        launch {
-            delay(60_000L)
-            isBurnInProtectionActive = true
-        }
-
-        val systemTimeout = try {
-            Settings.System.getInt(
-                context.contentResolver,
-                Settings.System.SCREEN_OFF_TIMEOUT,
-                15_000
-            ).toLong()
-        } catch (e: Exception) {
-            15_000L
-        }
-
-        when {
-            timeoutMillis < 0L -> {
-                window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-            timeoutMillis >= systemTimeout -> {
-                window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                val appWaitMillis = (timeoutMillis - systemTimeout).coerceAtLeast(0L)
-                delay(appWaitMillis)
-                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-            else -> {
-                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                delay(timeoutMillis)
-                isFakeSleeping = true
-            }
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (event.changes.any { it.pressed || it.previousPressed != it.pressed }) {
-                            lastInteractionTime = System.currentTimeMillis()
-                            if (isFakeSleeping) {
-                                isFakeSleeping = false
-                            } else {
-                                showSettingsIcon = true
-                            }
-                        }
-                    }
-                }
-            }
-            .checkerboardBurnInProtection(isIdle = isBurnInProtectionActive && burnInProtectionEnabled)
-    ) {
-        when (layoutMode) {
-            ClockLayoutMode.SINGLE -> {
-                MainClockSection(
-                    state = mainPagerState,
-                    foldState = foldState,
-                    is24Hour = is24Hour,
-                    showCornerDate = showCornerDate,
-                    showHingeAngle = showHingeAngle,
-                    showBattery = showBattery,
-                    batteryState = batteryState,
-                    isUiLocked = isUiLocked,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            ClockLayoutMode.DUAL_LEFT_LARGE -> {
-                Row(
-                    modifier = Modifier.fillMaxSize().background(Color.Black),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(0.70f)
-                            .background(Color.Black)
-                            .clip(RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 24.dp, bottomEnd = 24.dp))
-                    ) {
-                        MainClockSection(
-                            state = mainPagerState,
-                            foldState = foldState,
-                            is24Hour = is24Hour,
-                            showCornerDate = showCornerDate,
-                            showHingeAngle = showHingeAngle,
-                            showBattery = showBattery,
-                            batteryState = batteryState,
-                            isUiLocked = isUiLocked,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(0.30f)
-                            .background(Color.Black)
-                            .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 0.dp, bottomEnd = 0.dp))
-                    ) {
-                        SideWidgetPager(
-                            state = sidePagerState,
-                            weatherEnabled = weatherEnabled,
-                            weatherInfo = weatherInfo,
-                            isFahrenheit = isFahrenheit,
-                            is24Hour = is24Hour,
-                            isUiLocked = isUiLocked,
-                            calendarEvents = calendarEventsList,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-            }
-            ClockLayoutMode.DUAL_RIGHT_LARGE -> {
-                Row(
-                    modifier = Modifier.fillMaxSize().background(Color.Black),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(0.30f)
-                            .background(Color.Black)
-                            .clip(RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 24.dp, bottomEnd = 24.dp))
-                    ) {
-                        SideWidgetPager(
-                            state = sidePagerState,
-                            weatherEnabled = weatherEnabled,
-                            weatherInfo = weatherInfo,
-                            isFahrenheit = isFahrenheit,
-                            isUiLocked = isUiLocked,
-                            calendarEvents = calendarEventsList,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(0.70f)
-                            .background(Color.Black)
-                            .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 0.dp, bottomEnd = 0.dp))
-                    ) {
-                        MainClockSection(
-                            state = mainPagerState,
-                            foldState = foldState,
-                            is24Hour = is24Hour,
-                            showCornerDate = showCornerDate,
-                            showHingeAngle = showHingeAngle,
-                            showBattery = showBattery,
-                            batteryState = batteryState,
-                            isUiLocked = isUiLocked,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = showSettingsIcon && !isFakeSleeping,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 20.dp, top = 14.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Surface(
-                    onClick = {
-                        isUiLocked = !isUiLocked
-                        lastInteractionTime = System.currentTimeMillis()
-                    },
-                    color = if (isUiLocked) Color(0xFFC62828).copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.65f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(46.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        MaterialLockIcon(
-                            isLocked = isUiLocked,
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White
-                        )
-                    }
-                }
-
-                Surface(
-                    onClick = {
-                        if (!isUiLocked) {
-                            isSettingsOpen = true
-                            showSettingsIcon = false
-                        }
-                    },
-                    color = if (isUiLocked) Color(0xFF2C2C34).copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.65f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(46.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "⚙",
-                            fontSize = 24.sp,
-                            color = if (isUiLocked) Color(0xFF75757F) else Color.White
-                        )
-                    }
-                }
-            }
-        }
-
-        if (isFakeSleeping) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            )
-        }
-
-        if (isSettingsOpen) {
-            ClockSettingsDialog(
-                is24Hour = is24Hour,
-                on24HourChange = { is24Hour = it },
-                showBattery = showBattery,
-                onShowBatteryChange = { showBattery = it },
-                showCornerDate = showCornerDate,
-                onShowCornerDateChange = { showCornerDate = it },
-                showHingeAngle = showHingeAngle,
-                onShowHingeAngleChange = { showHingeAngle = it },
-                hasHingeSensor = hasHingeSensor,
-                flipScreen180 = flipScreen180,
-                onFlipScreen180Change = { flipScreen180 = it },
-                manualBrightness = manualBrightness,
-                onManualBrightnessChange = { manualBrightness = it },
-                brightnessValue = brightnessValue,
-                onBrightnessValueChange = { brightnessValue = it },
-                timeoutMillis = timeoutMillis,
-                onTimeoutChange = { timeoutMillis = it },
-                layoutMode = layoutMode,
-                onLayoutModeChange = { layoutMode = it },
-                weatherEnabled = weatherEnabled,
-                onWeatherEnabledChange = { enabled ->
-                    if (enabled) {
-                        val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                        val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                        if (hasFine || hasCoarse) {
-                            weatherEnabled = true
-                        } else {
-                            locationPermissionLauncher.launch(
-                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                            )
-                        }
-                    } else {
-                        weatherEnabled = false
-                    }
-                },
-                isFahrenheit = isFahrenheit,
-                onFahrenheitChange = { isFahrenheit = it },
-                showCalendarEvents = showCalendarEvents,
-                onShowCalendarEventsChange = { enabled ->
-                    if (enabled) {
-                        val hasCalPerm = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.READ_CALENDAR
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (hasCalPerm) {
-                            showCalendarEvents = true
-                            calendarEventsList = fetchUpcomingCalendarEvents(context)
-                        } else {
-                            calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
-                        }
-                    } else {
-                        showCalendarEvents = false
-                        calendarEventsList = emptyList()
-                    }
-                },
-                burnInProtectionEnabled = burnInProtectionEnabled,
-                onBurnInProtectionChange = { burnInProtectionEnabled = it },
-                onOpenTutorial = {
-                    isSettingsOpen = false
-                    isTutorialFromSettings = true
-                    showGestureTutorial = true
-                },
-                updateInfo = updateInfo,
-                isCheckingUpdate = isCheckingUpdate,
-                onCheckUpdateClick = {
-                    CoroutineScope(Dispatchers.Main).launch {
-                        isCheckingUpdate = true
-                        val result = checkForAppUpdate(currentVersionName)
-                        isCheckingUpdate = false
-                        updateInfo = result
-                        if (result == null) {
-                            Toast.makeText(context, "檢查更新失敗，請確認網路連線", Toast.LENGTH_SHORT).show()
-                        } else if (!result.hasUpdate) {
-                            Toast.makeText(context, "目前已是最新版本 ($currentVersionName)", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-                onDismiss = { isSettingsOpen = false }
-            )
-        }
-
-        if (showGestureTutorial) {
-            GestureTutorialOverlay(
-                showDontShowAgain = !isTutorialFromSettings,
-                onDismiss = { dontShowAgain ->
-                    showGestureTutorial = false
-                    if (!isTutorialFromSettings && dontShowAgain) {
-                        prefs.edit().putBoolean("pref_dismiss_gesture_tutorial", true).apply()
-                    }
-                    isTutorialFromSettings = false
-                }
-            )
-        } else if (showLayoutTip) {
-            LayoutTipOverlay(
-                onDismiss = { dontShowAgain ->
-                    showLayoutTip = false
-                    if (dontShowAgain) {
-                        prefs.edit().putBoolean("pref_dismiss_layout_tip", true).apply()
-                    }
-                }
-            )
-        }
-    }
-}
-
-@Composable
 fun MainClockSection(
     state: PagerState,
     foldState: String,
@@ -3609,6 +1827,7 @@ fun SideWidgetPager(
     is24Hour: Boolean = false,
     isUiLocked: Boolean,
     calendarEvents: List<UpcomingCalendarEvent>,
+    isLocked: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     VerticalPager(
@@ -3616,8 +1835,9 @@ fun SideWidgetPager(
         userScrollEnabled = !isUiLocked,
         modifier = modifier
     ) { page ->
-        when (page % 2) {
-            0 -> SideDateWidget(calendarEvents = calendarEvents)
+        when (page % 3) {
+            2 -> com.linzin.linzindeskclock.ui.MediaWidget(isLocked = isLocked, controlsEnabled = !isUiLocked)
+            0 -> SideDateWidget(calendarEvents = calendarEvents, interactionsEnabled = !isUiLocked && !isLocked)
             1 -> SideWeatherWidget(
                 weatherEnabled = weatherEnabled,
                 weatherInfo = weatherInfo,
@@ -3631,286 +1851,6 @@ fun SideWidgetPager(
 // ==========================================
 // 8. 側邊面板元件 (日曆與天氣)
 // ==========================================
-
-@Composable
-fun SideDateWidget(
-    calendarEvents: List<UpcomingCalendarEvent> = emptyList(),
-    modifier: Modifier = Modifier
-) {
-    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000L)
-        }
-    }
-
-    val calendar = remember(currentTime) {
-        Calendar.getInstance().apply { timeInMillis = currentTime }
-    }
-
-    val dayOfWeekStr = remember(currentTime) {
-        SimpleDateFormat("EEE", Locale.US).format(Date(currentTime))
-    }
-    val monthShortStr = remember(currentTime) {
-        SimpleDateFormat("MMM", Locale.US).format(Date(currentTime))
-    }
-    val dayOfMonthStr = remember(currentTime) {
-        SimpleDateFormat("d", Locale.US).format(Date(currentTime))
-    }
-    val monthFullStr = remember(currentTime) {
-        SimpleDateFormat("MMMM", Locale.US).format(Date(currentTime)).uppercase(Locale.US)
-    }
-
-    val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
-    val maxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val firstDayOfWeek = remember(currentTime) {
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = currentTime
-            set(Calendar.DAY_OF_MONTH, 1)
-        }
-        cal.get(Calendar.DAY_OF_WEEK) - 1
-    }
-
-    val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
-
-    val colorThu = Color(0xFF81C7D4)
-    val colorAccent = Color(0xFF5DAC81)
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    ) {
-        val containerWidth = maxWidth
-        val scale = (maxHeight / 360.dp).coerceIn(1.0f, 1.85f)
-        val horizontalPad = (18.dp * scale).coerceAtMost(36.dp)
-
-        val maxEventsToShow = when {
-            maxHeight < 280.dp -> 1
-            maxHeight < 360.dp -> 2
-            else -> 3
-        }
-        val visibleEvents = calendarEvents.take(maxEventsToShow)
-        val eventCount = visibleEvents.size
-        val hasEvents = visibleEvents.isNotEmpty()
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    horizontal = horizontalPad,
-                    vertical = when {
-                        hasEvents -> 10.dp * scale
-                        else -> 14.dp * scale
-                    }
-                ),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // =========================================================
-            // 1. 頂部日期區塊（依據是否有行程自動切換單行 / 雙行排版）
-            // =========================================================
-            if (hasEvents) {
-                // 👉 有行程：收納成一行 "Sun Nov 8"，字體等大，騰出空間給下方的行程卡片
-                val singleLineFontSize = (22f * scale).sp
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 4.dp * scale)
-                ) {
-                    Text(
-                        text = dayOfWeekStr,
-                        color = colorThu,
-                        fontSize = singleLineFontSize,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp * scale))
-                    Text(
-                        text = monthShortStr,
-                        color = Color.White,
-                        fontSize = singleLineFontSize,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp * scale))
-                    Text(
-                        text = dayOfMonthStr,
-                        color = Color.White,
-                        fontSize = singleLineFontSize,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                    )
-                }
-            } else {
-                // 👉 無行程：維持原有的雙行制大日期排版
-                Column {
-                    val headerFontSize = (27f * scale).sp
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = dayOfWeekStr,
-                            color = colorThu,
-                            fontSize = headerFontSize,
-                            fontWeight = FontWeight.Bold,
-                            style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                        )
-                        Spacer(modifier = Modifier.width(8.dp * scale))
-                        Text(
-                            text = monthShortStr,
-                            color = Color.White,
-                            fontSize = headerFontSize,
-                            fontWeight = FontWeight.Bold,
-                            style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                        )
-                    }
-
-                    val digitSize = (72f * scale).sp
-                    Text(
-                        text = dayOfMonthStr,
-                        color = Color.White,
-                        fontSize = digitSize,
-                        lineHeight = digitSize,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
-                        modifier = Modifier.padding(top = 2.dp * scale)
-                    )
-                }
-            }
-
-            // =========================================================
-            // 2. 中間近期行程卡片
-            // =========================================================
-            if (hasEvents) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp * scale),
-                    verticalArrangement = Arrangement.spacedBy(4.dp * scale)
-                ) {
-                    visibleEvents.forEach { event ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape((7 * scale).dp))
-                                .background(Color(0xFF1E1E24))
-                                .padding(
-                                    horizontal = 10.dp * scale,
-                                    vertical = (if (eventCount >= 3) 3.5.dp else 4.5.dp) * scale
-                                ),
-                            verticalArrangement = Arrangement.spacedBy(1.5.dp * scale)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp * scale)
-                                        .clip(CircleShape)
-                                        .background(colorAccent)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp * scale))
-                                Text(
-                                    text = event.timeLabel,
-                                    color = colorThu,
-                                    fontSize = (9.5f * scale).sp,
-                                    fontWeight = FontWeight.Bold,
-                                    style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                                )
-                            }
-
-                            Text(
-                                text = event.title,
-                                color = Color.White,
-                                fontSize = (11f * scale).sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth(),
-                                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                            )
-                        }
-                    }
-                }
-            }
-
-            // =========================================================
-            // 3. 底部月曆網格
-            // =========================================================
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = monthFullStr,
-                    color = colorAccent,
-                    fontSize = (10f * scale).sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                    modifier = Modifier.padding(bottom = 3.dp * scale)
-                )
-
-                val availableWidth = containerWidth - (horizontalPad * 2)
-                val cellSize = (availableWidth / 7.6f).coerceIn(16.dp, 32.dp)
-                val cellFontSize = (cellSize.value * 0.52f).sp
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    daysOfWeek.forEach { dayName ->
-                        Text(
-                            text = dayName,
-                            color = Color(0xFF8E8E93),
-                            fontSize = (cellFontSize.value * 0.95f).sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.width(cellSize)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(2.dp * scale))
-
-                val totalCells = ((firstDayOfWeek + maxDay + 6) / 7) * 7
-                for (row in 0 until (totalCells / 7)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = (0.6f * scale).dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        for (col in 0 until 7) {
-                            val cellIndex = row * 7 + col
-                            val dayNum = cellIndex - firstDayOfWeek + 1
-
-                            if (dayNum in 1..maxDay) {
-                                val isToday = (dayNum == currentDay)
-                                Box(
-                                    modifier = Modifier
-                                        .size(cellSize)
-                                        .then(
-                                            if (isToday) Modifier.border(
-                                                width = (1.2f * scale).dp,
-                                                color = colorAccent,
-                                                shape = CircleShape
-                                            ) else Modifier
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$dayNum",
-                                        color = if (isToday) colorAccent else Color.White,
-                                        fontSize = cellFontSize,
-                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                        textAlign = TextAlign.Center,
-                                        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-                                    )
-                                }
-                            } else {
-                                Spacer(modifier = Modifier.size(cellSize))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun SideWeatherWidget(
@@ -4039,15 +1979,9 @@ fun SideWeatherWidget(
                                 modifier = Modifier.size(26.dp)
                             )
 
-                            val timeLabel = remember(hourly.hourOfDay, is24Hour) {
-                                if (is24Hour) {
-                                    String.format(Locale.getDefault(), "%02d:00", hourly.hourOfDay)
-                                } else {
-                                    val h = hourly.hourOfDay
-                                    val amPm = if (h < 12) "AM" else "PM"
-                                    val displayH = if (h == 0) 12 else if (h > 12) h - 12 else h
-                                    "$displayH$amPm"
-                                }
+                            val hourLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+                            val timeLabel = remember(hourly.hourOfDay, is24Hour, hourLocale) {
+                                formatForecastHour(hourly.hourOfDay, is24Hour, hourLocale)
                             }
 
                             Text(
@@ -4189,17 +2123,8 @@ fun DigitalClockFace(
         cal.get(Calendar.AM_PM) == Calendar.AM
     }
 
-    val dateString = remember(currentTime) {
-        val locale = Locale.getDefault()
-        val isCjk = locale.language in listOf("zh", "ja")
-        if (isCjk) {
-            val weekStr = SimpleDateFormat("EEEE", locale).format(Date(currentTime))
-            val dateStr = SimpleDateFormat("M月d日", locale).format(Date(currentTime))
-            "$weekStr, $dateStr"
-        } else {
-            SimpleDateFormat("EEEE, MMMM d", locale).format(Date(currentTime))
-        }
-    }
+    val dateLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val dateString = remember(currentTime, dateLocale) { formatClockDate(currentTime, dateLocale) }
 
     // 顯示秒數時稍微縮減水平邊距，給予字串更多排版寬度
     val horizontalPad = if (showSeconds) 32.dp else 40.dp
@@ -4420,17 +2345,8 @@ fun AnalogClockFace(
     val hours = calendar.get(Calendar.HOUR)
     val minutes = calendar.get(Calendar.MINUTE)
     val seconds = calendar.get(Calendar.SECOND)
-    val dateString = remember(currentTime) {
-        val locale = Locale.getDefault()
-        val isCjk = locale.language in listOf("zh", "ja")
-        if (isCjk) {
-            val weekStr = SimpleDateFormat("EEEE", locale).format(Date(currentTime))
-            val dateStr = SimpleDateFormat("M月d日", locale).format(Date(currentTime))
-            "$weekStr, $dateStr"
-        } else {
-            SimpleDateFormat("EEEE, MMMM d", locale).format(Date(currentTime))
-        }
-    }
+    val dateLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val dateString = remember(currentTime, dateLocale) { formatClockDate(currentTime, dateLocale) }
 
     val currentBgColor = when (analogStyleIndex) {
         0 -> Color(0xFFEED55E)
@@ -5189,17 +3105,8 @@ fun FlipClockFace(
         val cal = Calendar.getInstance().apply { timeInMillis = currentTime }
         cal.get(Calendar.AM_PM) == Calendar.AM
     }
-    val dateString = remember(currentTime) {
-        val locale = Locale.getDefault()
-        val isCjk = locale.language in listOf("zh", "ja")
-        if (isCjk) {
-            val weekStr = SimpleDateFormat("EEEE", locale).format(Date(currentTime))
-            val dateStr = SimpleDateFormat("M月d日", locale).format(Date(currentTime))
-            "$weekStr, $dateStr"
-        } else {
-            SimpleDateFormat("EEEE, MMMM d", locale).format(Date(currentTime))
-        }
-    }
+    val dateLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val dateString = remember(currentTime, dateLocale) { formatClockDate(currentTime, dateLocale) }
 
     BoxWithConstraints(
         modifier = modifier
@@ -5367,7 +3274,72 @@ fun FlipClockFace(
 // 10. 主 Activity 實作 (轉軸監聽與狀態機調度)
 // ==========================================
 
-class MainActivity : ComponentActivity(), SensorEventListener {
+class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHost.Host {
+    private var entryMode by mutableStateOf(ClockEntryMode.MANUAL)
+    private var clockUiVisible by mutableStateOf(true)
+    private val sessionHandler = Handler(Looper.getMainLooper())
+    private var lockPresentationAcknowledged = false
+    private var screenOffRequested = false
+    private val screenOffController by lazy {
+        com.linzin.linzindeskclock.power.ScreenOffController(this, window,
+            prepareHost = {
+                screenOffRequested = true
+                ClockActivationHost.detach(this)
+                sensorManager.unregisterListener(this)
+                clearLockedWindow()
+            }, finishHost = { finish() })
+    }
+    private data class LockedWindowSnapshot(val mode: ClockEntryMode,val orientation: Int,val flags: Int,val brightness: Float,val clockShown: Boolean)
+    private var lockedWindowSnapshot: LockedWindowSnapshot? = null
+    override fun onClockDeviceUnlocked() {
+        if(entryMode == ClockEntryMode.LOCK_SCREEN) { clearLockedWindow(); finish() }
+    }
+
+    override fun enterLockedClock(): Boolean {
+        if (screenOffRequested || entryMode == ClockEntryMode.LOCK_SCREEN || hasHingeSensor || isFinishing || isDestroyed || getSystemService(PowerManager::class.java).isInteractive || ClockCycleStore(this).suppressed || ClockCycleStore(this).activeWindow() == null) return false
+        val snapshot = LockedWindowSnapshot(entryMode,requestedOrientation,window.attributes.flags,window.attributes.screenBrightness,showClockScreen)
+        lockedWindowSnapshot = snapshot
+        entryMode = ClockEntryMode.LOCK_SCREEN
+        showClockScreen = true
+        lockPresentationAcknowledged = false
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        requestedOrientation = preferredClockOrientation(this, hasHingeSensor)
+        // Window flags are only a best-effort offer to this existing task. Never retry/wake in a loop.
+        sessionHandler.postDelayed({
+            if (entryMode == ClockEntryMode.LOCK_SCREEN && !lockPresentationAcknowledged) {
+                clearLockedWindow(restoreWake = true)
+                entryMode = snapshot.mode
+                showClockScreen = snapshot.clockShown
+            }
+        }, 1000L)
+        return true
+    }
+
+    private fun clearLockedWindow(restoreWake: Boolean = false) {
+        sessionHandler.removeCallbacksAndMessages(null)
+        setShowWhenLocked(false); setTurnScreenOn(false)
+        val ownedFlags = WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        lockedWindowSnapshot?.let { snapshot ->
+            val restoredFlags = if (restoreWake) snapshot.flags else
+                snapshot.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
+            window.setFlags(restoredFlags and ownedFlags,ownedFlags)
+            window.attributes = window.attributes.apply { screenBrightness = snapshot.brightness }
+            requestedOrientation = snapshot.orientation
+        }
+        lockedWindowSnapshot = null
+        if (!restoreWake) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+    private fun exitLockedClock() {
+        ClockCycleStore(this).suppress()
+        getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
+        clearLockedWindow()
+        finish()
+    }
+    override fun onStart() { super.onStart(); clockUiVisible = true }
+    override fun onUserLeaveHint() { ClockActivationHost.detach(this); super.onUserLeaveHint() }
+
 
     // 各品牌外螢幕狀態 ID 適配
     private val targetStateId: String by lazy {
@@ -5385,12 +3357,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private val isHonorDevice: Boolean by lazy {
         Build.MANUFACTURER.lowercase().contains("honor")
-    }
-
-    private val isMotorolaDevice: Boolean by lazy {
-        val m = Build.MANUFACTURER.lowercase()
-        val b = Build.BRAND.lowercase()
-        m.contains("motorola") || m.contains("lenovo") || b.contains("motorola") || b.contains("moto")
     }
 
     /**
@@ -5480,12 +3446,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val savedLang = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
-            .getString("pref_app_language", "system") ?: "system"
-        if (savedLang != "system") {
-            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(savedLang))
-        }
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            ClockCycleStore(this).onExplicitUserEntry(
+                getSystemService(PowerManager::class.java).isInteractive,
+                getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+        }
         enableEdgeToEdge()
 
         // 鎖死視窗底色為純黑，防止螢幕切換/旋轉瞬間漏出系統白底
@@ -5515,13 +3481,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             if (bypassCount >= 3) {
                 isNonFoldableBypassed = true
                 showClockScreen = true
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                requestedOrientation = preferredClockOrientation(this, hasHingeSensor)
             }
         }
 
         setContent {
             MaterialTheme(colorScheme = DeskClockColorScheme) {
                 BackHandler(enabled = showClockScreen) {
+                    if (entryMode == ClockEntryMode.LOCK_SCREEN) { exitLockedClock(); return@BackHandler }
                     val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
                     val bypassCount = prefs.getInt("pref_non_fold_bypass_count", 0)
 
@@ -5535,24 +3502,34 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         showClockScreen = false
                         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        safelyResetDeviceState()
+                        if (hasHingeSensor) safelyResetDeviceState()
                     }
                 }
 
-                if (showClockScreen) {
-                    DeskClockScreen(
+                if (showClockScreen && (clockUiVisible || entryMode == ClockEntryMode.LOCK_SCREEN)) {
+                    androidx.compose.runtime.key(entryMode) { DeskClockScreen(
                         foldState = foldState,
                         targetStateId = targetStateId,
-                        hasHingeSensor = hasHingeSensor
-                    )
-                } else {
+                        hasHingeSensor = hasHingeSensor,
+                        entryMode = entryMode,
+                        onExit = { exitLockedClock() },
+                        onScreenOff = { screenOffController.request() },
+                        onLowBatteryExit = {
+                            if(entryMode == ClockEntryMode.LOCK_SCREEN) exitLockedClock() else finish()
+                        }
+                    ) }
+                } else if (!showClockScreen) {
                     InitialScreen(
                         hasHingeSensor = hasHingeSensor,
                         isClamshell = isClamshell || (hasHingeSensor && isTallAspectRatio()),
                         onEnterClockDirectly = {
+                            ClockCycleStore(this).onExplicitUserEntry(
+                                getSystemService(PowerManager::class.java).isInteractive,
+                                getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+                            entryMode = ClockEntryMode.MANUAL
                             isNonFoldableBypassed = true
                             showClockScreen = true
-                            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            requestedOrientation = preferredClockOrientation(this, hasHingeSensor)
                         }
                     )
                 }
@@ -5563,6 +3540,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        if (screenOffRequested || isFinishing) return
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        val activelyUnlocked = getSystemService(PowerManager::class.java).isInteractive && !keyguard.isKeyguardLocked
+        if (entryMode == ClockEntryMode.LOCK_SCREEN) {
+            if (activelyUnlocked) { ClockCycleStore(this).observeUnlocked(); clearLockedWindow(); finish(); return }
+            lockPresentationAcknowledged = true
+            sessionHandler.removeCallbacksAndMessages(null)
+            ClockCycleStore(this).invalidateOffer()
+            getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
+        } else if (!hasHingeSensor && activelyUnlocked) {
+            ClockCycleStore(this).observeUnlocked()
+            ClockActivationHost.attach(this)
+            val autoSettings=com.linzin.linzindeskclock.settings.AutoClockPreferences(this)
+            if(autoSettings.enabled && !AutoClockService.running && !shouldPauseAutoClockForLowBattery(this)) {
+                try { ContextCompat.startForegroundService(this,Intent(this,AutoClockService::class.java)) }
+                catch (_:RuntimeException) { autoSettings.lastActivation="MONITOR_STOPPED" }
+            }
+        }
         hingeAngleSensor?.let {
             sensorManager.unregisterListener(this)
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
@@ -5574,7 +3569,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
             val isPermanentBypass = !hasHingeSensor && prefs.getInt("pref_non_fold_bypass_count", 0) >= 3
             if (isPermanentBypass) {
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                requestedOrientation = preferredClockOrientation(this, hasHingeSensor)
             }
         }
     }
@@ -5589,6 +3584,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onPause() {
         super.onPause()
+        if (entryMode == ClockEntryMode.LOCK_SCREEN) setTurnScreenOn(false)
         // 若處於外螢幕時鐘畫面，保留感應器監聽以確保能感應後續展開動作
         if (!showClockScreen) {
             sensorManager.unregisterListener(this)
@@ -5597,7 +3593,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onStop() {
         super.onStop()
+        clockUiVisible = false
         sensorManager.unregisterListener(this)
+        if(getSystemService(PowerManager::class.java).isInteractive) ClockActivationHost.detach(this)
+        if(entryMode == ClockEntryMode.LOCK_SCREEN) {
+            if(lockPresentationAcknowledged && !isChangingConfigurations && !isFinishing) exitLockedClock()
+            return
+        }
 
         val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
         val isPermanentBypass = !hasHingeSensor && prefs.getInt("pref_non_fold_bypass_count", 0) >= 3
@@ -5616,17 +3618,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             setImmersiveMode(window, false)
-            safelyResetDeviceState()
+            if(hasHingeSensor) safelyResetDeviceState()
         }
     }
 
     override fun onDestroy() {
+        ClockActivationHost.detach(this)
+        sessionHandler.removeCallbacksAndMessages(null)
+        if(entryMode == ClockEntryMode.LOCK_SCREEN) clearLockedWindow()
         super.onDestroy()
         setImmersiveMode(window, false)
-        safelyResetDeviceState()
+        if(hasHingeSensor) safelyResetDeviceState()
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
+        if (screenOffRequested || isFinishing) return
         if (event?.sensor?.type == Sensor.TYPE_HINGE_ANGLE) {
             val currentAngle = event.values[0]
             lastRecordedHingeAngle = currentAngle
@@ -5665,19 +3671,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             // 半摺角度 (30° ~ 120°)：觸發外螢幕橫向時鐘
             if (currentAngle in 30f..120f) {
                 if (!showClockScreen) {
+                    entryMode = ClockEntryMode.FOLDABLE_HINGE
                     showClockScreen = true
 
-                    val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
-                    val isFlipped = prefs.getBoolean("pref_flip_screen_180", false)
-
-                    requestedOrientation = if (isFlipped) {
-                        // 若先前有開啟反轉，直接強制鎖定在 90° 橫向
-                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    } else if (isMotorolaDevice || isClamshell || isTallAspectRatio()) {
-                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    } else {
-                        ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
-                    }
+                    requestedOrientation = preferredClockOrientation(this, hasHingeSensor)
 
                     val needsStateOverride = !isTallAspectRatio() || !isRearDisplayActive
                     if (needsStateOverride) {

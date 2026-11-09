@@ -1,0 +1,14 @@
+<resources>
+    <string name="screen_off_admin_label">Linzin Desk Clockの画面消灯</string>
+    <string name="screen_off_admin_description">時計のタイマー終了時に端末をロックして画面を消灯するための、任意のデバイス管理者権限です。要求する権限は画面ロックのみです。</string>
+    <string name="screen_off_admin_explanation">タイマー終了時にすぐに画面を消灯するには、ロック専用のデバイス管理者権限を任意で有効にする必要があります。この権限でアプリができるのは、端末のロックだけです。システムによってロックされた後は、解除にPIN、パターン、またはパスワードが必要になる場合があります。</string>
+    <string name="screen_off_permission_failed">画面消灯の権限設定を開けませんでした。再試行するか、この任意の権限を許可せずに続行できます。</string>
+    <string name="screen_off_fallback_message">ロック専用のデバイス管理者権限を許可しない場合、タイマー終了時に時計を閉じます。その後、通常のシステム設定の待ち時間が経過すると画面が消灯します。</string>
+    <string name="screen_off_permission_title">即時の画面消灯（任意）</string>
+    <string name="screen_off_permission_granted">ロック専用のデバイス管理者権限が有効です。タイマー終了時に端末をロックして画面を消灯できます。</string>
+    <string name="screen_off_permission_not_granted">ロック専用のデバイス管理者権限は有効になっていません。</string>
+    <string name="screen_off_permission_unsupported">この端末は、ロック専用のデバイス管理者権限に対応していません。</string>
+    <string name="screen_off_permission_enable">ロック専用のデバイス管理者権限を有効にする</string>
+    <string name="screen_off_permission_locked">画面消灯の権限を有効にする前に、端末のロックを解除してください。</string>
+    <string name="screen_off_timeout_fallback">即時の画面消灯を利用できないため、時計を閉じました。システム設定の待ち時間が経過すると画面が消灯します。</string>
+</resources>

@@ -1,0 +1,8 @@
+<resources>
+    <string name="low_battery_title">バッテリー残量低下時の保護</string>
+    <string name="low_battery_description">電源に接続されていないときだけ動作します。「時計を暗くする」では、時計の明るさを一時的に最大8%に抑えます。充電を開始するか、バッテリー残量が回復すると、元の明るさ設定に戻ります。「時計を終了」では時計を閉じ、再びアプリを開くまで監視を停止します。</string>
+    <string name="low_battery_off">オフ</string>
+    <string name="low_battery_dim">時計を暗くする</string>
+    <string name="low_battery_exit">時計を終了</string>
+    <string name="low_battery_threshold">バッテリー残量が%1$d%%未満で動作</string>
+</resources>

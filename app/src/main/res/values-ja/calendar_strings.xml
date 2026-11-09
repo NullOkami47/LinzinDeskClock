@@ -1,0 +1,14 @@
+<resources>
+    <string name="calendar_event_details">予定の詳細</string>
+    <string name="calendar_view_details">予定の詳細を表示</string>
+    <string name="calendar_start">開始</string>
+    <string name="calendar_end">終了</string>
+    <string name="calendar_location">場所</string>
+    <string name="calendar_description">説明</string>
+    <string name="calendar_name">カレンダー</string>
+    <string name="calendar_open_in_app">カレンダーで開く</string>
+    <string name="calendar_close">閉じる</string>
+    <string name="calendar_unlock_to_view">この予定を表示するには、端末のロックを解除してください。</string>
+    <string name="calendar_permission_required">この予定を表示するには、カレンダーへのアクセス権限が必要です。</string>
+    <string name="calendar_app_unavailable">この予定を開けるカレンダーアプリがありません。</string>
+</resources>

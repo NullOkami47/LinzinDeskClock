@@ -13,3 +13,23 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Local build tools, diagnostics and module outputs
+/.local/
+**/build/
+/.kotlin/
+
+# Private signing, environment and device diagnostics
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.apk
+*.aab
+/keystore.properties
+/signing.properties
+/credentials.json

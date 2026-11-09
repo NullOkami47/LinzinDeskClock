@@ -20,8 +20,8 @@
     <string name="layout_tip_title">More Layout Options</string>
     <string name="layout_tip_desc">Looking for more information? You can switch to split layouts (Clock + Calendar / Weather) anytime in the Settings menu!</string>
     <string name="layout_tip_single">Full Screen</string>
-    <string name="layout_tip_dual_left">Split (Left Large)</string>
-    <string name="layout_tip_dual_right">Split (Right Large)</string>
+    <string name="layout_tip_dual_left">Split (Clock Left)</string>
+    <string name="layout_tip_dual_right">Split (Clock Right)</string>
 
     <!-- Non-foldable Easter Egg & Dialog -->
     <string name="btn_not_foldable">Not a book-style foldable?</string>
@@ -41,8 +41,8 @@
     <string name="settings_title">Clock Settings</string>
     <string name="layout_section_title">Screen Layout</string>
     <string name="layout_single">Single Block (100% Fullscreen)</string>
-    <string name="layout_dual_left">Dual Block (Left 70% : Right 30%)</string>
-    <string name="layout_dual_right">Dual Block (Left 30% : Right 70%)</string>
+    <string name="layout_dual_left">Dual panel (clock stays left; drag to resize)</string>
+    <string name="layout_dual_right">Dual panel (clock stays right; drag to resize)</string>
 
     <!-- Settings Dialog: Weather Options -->
     <string name="pref_weather_title">Enable Local Weather</string>
@@ -92,7 +92,7 @@
     <string name="pref_brightness_desc_auto">Follow system auto brightness</string>
     <string name="brightness_value">Brightness</string>
     <string name="pref_timeout_title">Screen Timeout</string>
-    <string name="pref_timeout_desc">Screen will enter standby blackout to save power when timeout expires. Tap screen to wake.</string>
+    <string name="pref_timeout_desc">When the idle timer expires, the clock exits and the normal system screen timeout applies. Optional lock-only device admin access lets the timer lock the device and turn off the screen immediately.</string>
     <string name="timeout_1m">1 minute</string>
     <string name="timeout_3m">3 minutes</string>
     <string name="timeout_10m">10 minutes</string>
@@ -109,8 +109,8 @@
     <string name="layout_switch_dialog_title">Switch to Split Layout?</string>
     <string name="layout_switch_dialog_desc">You are currently in \"Full Screen\" mode. Weather and calendar events are displayed in the side panel under \"Split Layout\" modes.\n\nWould you like to switch to a split layout now?</string>
     <string name="layout_switch_opt_no">No, keep single</string>
-    <string name="layout_switch_opt_left">Yes (Left Large)</string>
-    <string name="layout_switch_opt_right">Yes (Right Large)</string>
+    <string name="layout_switch_opt_left">Yes (Clock Left)</string>
+    <string name="layout_switch_opt_right">Yes (Clock Right)</string>
 
     <!-- Update Check -->
     <string name="toast_update_available">New version available (%1$s)! Check the bottom of Settings to update.</string>
@@ -125,4 +125,6 @@
     <string name="settings_update_available_desc">A new release is available on GitHub. It is recommended to update now.</string>
     <string name="settings_btn_go_to_github_releases">Download from GitHub Releases</string>
 
+    <string name="settings_update_failed">Unable to check for updates. Please check your network connection.</string>
+    <string name="settings_update_current">You are using the latest version (%1$s).</string>
 </resources>
