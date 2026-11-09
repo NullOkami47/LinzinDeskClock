@@ -22,6 +22,6 @@
 
 ## 驗證與限制
 
-完整測試分為 JVM、lint、API 35 instrumentation 及四項背景啟動檢查。每次整合以實際 commit 與 CI 結果為準，不能沿用其他來源版本的通過狀態。測試命令與條件見 [建置環境](build-environment.md) 及 [模擬器驗證](emulator-testing.md)。
+完整測試分為 JVM、lint、API 35 instrumentation 及四項背景啟動檢查。每次整合以實際 commit 與測試結果為準，不能沿用其他來源版本的通過狀態。測試命令與條件見 [建置環境](build-environment.md) 及 [模擬器驗證](emulator-testing.md)。
 
 模擬器驗證無法保證所有 OEM 的熄屏感測、背景啟動、外螢幕指令、螢幕保護程式或媒體提供者行為。手動檢查項目見 [真機驗收清單](v2-device-checklist.md)。

@@ -6,7 +6,7 @@
 
 僅允許可拋棄的專用 API 35 Google APIs 模擬器。測試需要明確的 `linzinDedicatedMediaEmulator=true` instrumentation 參數，且先核對 emulator hardware、fingerprint、API 版本及 user 0。一般測試裝置或缺少參數時會拒絕執行會調整系統狀態的 fixture。
 
-本機所有 ADB 命令必須指定已核對的 server 與 emulator serial；使用者實體手機不能作為備援目標。標準完整執行由 [CI 與建置腳本](../../../../../../../../docs/build-environment.md) 管理。
+本機所有 ADB 命令必須指定已核對的 server 與 emulator serial；使用者實體手機不能作為備援目標。建置指令見 [建置與測試](../../../../../../../../docs/build-environment.md)。
 
 ## 權限與清理
 
@@ -21,6 +21,6 @@ fixture 僅調整本 App 的通知監聽元件，記錄原授權與其他 listen
 - PixelCopy 驗證完整封面比例、鏡像模糊延伸、轉場、裁切與缺圖清理。
 - 正式畫面的控制面板比例、進度點座標、UI Lock、鎖定畫面內容、防烙印遮黑及觸控重設。
 
-等待都有期限，失敗及跳過不能算作通過。PixelCopy 截圖只包含合成 fixture，寫入測試裝置快取，由 CI 收集到忽略的本機輸出或有期限的測試 artifacts。
+等待都有期限，失敗及跳過不能算作通過。PixelCopy 截圖只包含合成 fixture，寫入測試裝置快取，可收集到忽略的本機測試輸出目錄。
 
 以上結果不代表所有 OEM／外部播放器相容、真實聲音播放、長期記憶體穩定性或 OLED 耐久性；相關手動項目見專案的真機驗收清單。
