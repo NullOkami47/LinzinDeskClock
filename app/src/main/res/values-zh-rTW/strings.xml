@@ -79,7 +79,7 @@
     <string name="pref_brightness_desc_auto">跟隨系統自動設定</string>
     <string name="brightness_value">亮度數值</string>
     <string name="pref_timeout_title">閒置自動關閉螢幕</string>
-    <string name="pref_timeout_desc">若時鐘逾時設定短於系統休眠，將在倒數完畢後進入「黑屏偽休眠」以達到省電效果，碰觸螢幕即可喚醒。</string>
+    <string name="pref_timeout_desc">閒置倒數結束時會退出時鐘，並依系統原有的螢幕逾時設定關閉螢幕。自行啟用選用的「僅鎖定」裝置管理員權限後，可在倒數結束時鎖定裝置並立即關閉螢幕。</string>
     <string name="timeout_1m">1 分鐘</string>
     <string name="timeout_3m">3 分鐘</string>
     <string name="timeout_10m">10 分鐘</string>

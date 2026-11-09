@@ -81,7 +81,7 @@
     <string name="pref_brightness_desc_auto">Follow system auto brightness</string>
     <string name="brightness_value">Brightness</string>
     <string name="pref_timeout_title">Screen Timeout</string>
-    <string name="pref_timeout_desc">Screen will enter standby blackout to save power when timeout expires. Tap screen to wake.</string>
+    <string name="pref_timeout_desc">When the idle timer expires, the clock exits and the normal system screen timeout applies. Optional lock-only device admin access lets the timer lock the device and turn off the screen immediately.</string>
     <string name="timeout_1m">1 minute</string>
     <string name="timeout_3m">3 minutes</string>
     <string name="timeout_10m">10 minutes</string>

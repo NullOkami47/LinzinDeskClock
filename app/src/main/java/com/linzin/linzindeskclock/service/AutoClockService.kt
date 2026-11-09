@@ -52,7 +52,7 @@ class AutoClockService : Service() {
             }
         },onUnlock = {
             cycle.onUnlock(); cancelOffer(); scan.onUnlock(); candidate.clear()
-        },onScreenOn = { if(monitor.activelyUnlocked) { cycle.onUnlock(); cancelOffer(); scan.onUnlock() } })
+        },onScreenOn = { if(monitor.activelyUnlocked) { cycle.observeUnlocked(); cancelOffer(); scan.onUnlock() } })
         scan = AutoClockTriggerController(this,foldable,
             mayScan = { AutoClockPreferences(this).enabled && !monitor.activelyUnlocked && scanWindow?.let(cycle::isCurrentWindow) == true },
             onEligible = {
@@ -104,7 +104,7 @@ class AutoClockService : Service() {
             else startForeground(MONITOR_ID, monitoringNotification())
             running = true
             monitor.start()
-            if(monitor.activelyUnlocked) { cycle.onUnlock(); scan.onUnlock() }
+            if(monitor.activelyUnlocked) { cycle.observeUnlocked(); scan.onUnlock() }
         } catch (_: RuntimeException) {
             running = false; AutoClockPreferences(this).lastActivation="MONITOR_STOPPED"; stopSelf(); return START_NOT_STICKY
         }

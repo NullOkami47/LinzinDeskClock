@@ -27,6 +27,15 @@ import com.linzin.linzindeskclock.service.AutoClockService
 /** Unexported user-notification destination. A short-lived single-use offer is required. */
 class ClockSessionActivity : ComponentActivity() {
     private var registered = false
+    private var screenOffRequested = false
+    private val screenOffController by lazy {
+        com.linzin.linzindeskclock.power.ScreenOffController(this, window,
+            prepareHost = {
+                screenOffRequested = true
+                setTurnScreenOn(false)
+                setShowWhenLocked(false)
+            }, finishHost = { finish() })
+    }
     private lateinit var exit: ClockExitController
     private lateinit var sessionState: ClockSessionState
     private val unlock = object : BroadcastReceiver() {
@@ -69,15 +78,16 @@ class ClockSessionActivity : ComponentActivity() {
         registered = true
         onBackPressedDispatcher.addCallback(this,object : OnBackPressedCallback(true) { override fun handleOnBackPressed() { exit.exit() } })
         setContent { MaterialTheme(colorScheme = DeskClockColorScheme) {
-            DeskClockScreen(hasHingeSensor = false, entryMode = ClockEntryMode.LOCK_SCREEN, onExit = { exit.exit() })
+            DeskClockScreen(hasHingeSensor = false, entryMode = ClockEntryMode.LOCK_SCREEN, onExit = { exit.exit() },
+                onScreenOff = { screenOffController.request() })
         } }
     }
     override fun onResume() {
         super.onResume()
-        if(!::exit.isInitialized) return
+        if(screenOffRequested || isFinishing || !::exit.isInitialized) return
         if(!sessionState.presented) setTurnScreenOn(true)
-        if(!getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
-            ClockCycleStore(this).onUnlock(); finish()
+        if(getSystemService(PowerManager::class.java).isInteractive && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            ClockCycleStore(this).observeUnlocked(); finish()
         }
     }
     override fun onWindowFocusChanged(hasFocus:Boolean) {

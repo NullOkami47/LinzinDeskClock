@@ -7,6 +7,56 @@ import org.junit.Test
 
 /** Real store and serialised state; only the Android storage/clock/boot boundaries are supplied. */
 class ClockCycleStoreTest {
+    @Test fun explicitUnlockedEntryRecoversSuppressionAfterMissedBroadcast() {
+        val f = Fixture()
+        f.store().onUnlock()
+        f.store().suppress()
+        val restored = f.restoredStore()
+        restored.observeUnlocked()
+        assertTrue(restored.suppressed)
+        restored.onExplicitUserEntry(interactive = true, keyguardLocked = false)
+        restored.noteLock()
+        assertFalse(restored.suppressed)
+        assertTrue(restored.claimAttempt())
+    }
+
+    @Test fun lockedOrNonInteractiveEntryCannotClearTimeoutSuppression() {
+        for ((interactive, locked) in listOf(false to false, false to true, true to true)) {
+            val f = Fixture()
+            f.store().suppress()
+            f.store().onExplicitUserEntry(interactive, locked)
+            assertTrue(f.store().suppressed)
+            assertNull(f.store().activeWindow())
+        }
+    }
+
+    @Test fun timeoutFromManualClockBlocksDuplicateLocksAndPassiveResumeUntilRealUnlock() {
+        val f = Fixture()
+        f.store().onUnlock()
+        f.store().suppress()
+        val restored = f.restoredStore()
+        repeat(3) {
+            restored.observeUnlocked()
+            restored.noteLock()
+            assertTrue(restored.suppressed)
+            assertNull(restored.activeWindow())
+            assertNull(restored.currentCycle())
+            assertFalse(restored.claimAttempt())
+            assertEquals("", restored.offer())
+        }
+        restored.onUnlock()
+        restored.noteLock()
+        assertFalse(restored.suppressed)
+        assertTrue(restored.claimAttempt())
+    }
+
+    @Test fun initialUnlockedObservationArmsOnlyWithoutExplicitSuppression() {
+        val f = Fixture()
+        f.store().observeUnlocked()
+        f.store().noteLock()
+        assertTrue(f.store().claimAttempt())
+    }
+
     @Test fun sessionCycleSurvivesDeadlineButNotUnlockOrSuppression() {
         val f=Fixture(); f.lock()
         val cycle=f.store().currentCycle()

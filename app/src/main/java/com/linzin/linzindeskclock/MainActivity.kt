@@ -3327,6 +3327,16 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
     private var clockUiVisible by mutableStateOf(true)
     private val sessionHandler = Handler(Looper.getMainLooper())
     private var lockPresentationAcknowledged = false
+    private var screenOffRequested = false
+    private val screenOffController by lazy {
+        com.linzin.linzindeskclock.power.ScreenOffController(this, window,
+            prepareHost = {
+                screenOffRequested = true
+                ClockActivationHost.detach(this)
+                sensorManager.unregisterListener(this)
+                clearLockedWindow()
+            }, finishHost = { finish() })
+    }
     private data class LockedWindowSnapshot(val mode: ClockEntryMode,val orientation: Int,val flags: Int,val brightness: Float,val clockShown: Boolean)
     private var lockedWindowSnapshot: LockedWindowSnapshot? = null
     override fun onClockDeviceUnlocked() {
@@ -3334,7 +3344,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
     }
 
     override fun enterLockedClock(): Boolean {
-        if (entryMode == ClockEntryMode.LOCK_SCREEN || hasHingeSensor || isFinishing || isDestroyed || getSystemService(PowerManager::class.java).isInteractive || ClockCycleStore(this).suppressed || ClockCycleStore(this).activeWindow() == null) return false
+        if (screenOffRequested || entryMode == ClockEntryMode.LOCK_SCREEN || hasHingeSensor || isFinishing || isDestroyed || getSystemService(PowerManager::class.java).isInteractive || ClockCycleStore(this).suppressed || ClockCycleStore(this).activeWindow() == null) return false
         val snapshot = LockedWindowSnapshot(entryMode,requestedOrientation,window.attributes.flags,window.attributes.screenBrightness,showClockScreen)
         lockedWindowSnapshot = snapshot
         entryMode = ClockEntryMode.LOCK_SCREEN
@@ -3347,7 +3357,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
         // Window flags are only a best-effort offer to this existing task. Never retry/wake in a loop.
         sessionHandler.postDelayed({
             if (entryMode == ClockEntryMode.LOCK_SCREEN && !lockPresentationAcknowledged) {
-                clearLockedWindow()
+                clearLockedWindow(restoreWake = true)
                 entryMode = snapshot.mode
                 showClockScreen = snapshot.clockShown
             }
@@ -3355,16 +3365,19 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
         return true
     }
 
-    private fun clearLockedWindow() {
+    private fun clearLockedWindow(restoreWake: Boolean = false) {
         sessionHandler.removeCallbacksAndMessages(null)
         setShowWhenLocked(false); setTurnScreenOn(false)
         val ownedFlags = WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         lockedWindowSnapshot?.let { snapshot ->
-            window.setFlags(snapshot.flags and ownedFlags,ownedFlags)
+            val restoredFlags = if (restoreWake) snapshot.flags else
+                snapshot.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
+            window.setFlags(restoredFlags and ownedFlags,ownedFlags)
             window.attributes = window.attributes.apply { screenBrightness = snapshot.brightness }
             requestedOrientation = snapshot.orientation
         }
         lockedWindowSnapshot = null
+        if (!restoreWake) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     private fun exitLockedClock() {
         ClockCycleStore(this).suppress()
@@ -3482,6 +3495,11 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            ClockCycleStore(this).onExplicitUserEntry(
+                getSystemService(PowerManager::class.java).isInteractive,
+                getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+        }
         enableEdgeToEdge()
 
         // 鎖死視窗底色為純黑，防止螢幕切換/旋轉瞬間漏出系統白底
@@ -3543,6 +3561,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
                         hasHingeSensor = hasHingeSensor,
                         entryMode = entryMode,
                         onExit = { exitLockedClock() },
+                        onScreenOff = { screenOffController.request() },
                         onLowBatteryExit = {
                             if(entryMode == ClockEntryMode.LOCK_SCREEN) exitLockedClock() else finish()
                         }
@@ -3552,6 +3571,9 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
                         hasHingeSensor = hasHingeSensor,
                         isClamshell = isClamshell || (hasHingeSensor && isTallAspectRatio() && lastRecordedHingeAngle >= 160f),
                         onEnterClockDirectly = {
+                            ClockCycleStore(this).onExplicitUserEntry(
+                                getSystemService(PowerManager::class.java).isInteractive,
+                                getSystemService(KeyguardManager::class.java).isKeyguardLocked)
                             entryMode = ClockEntryMode.MANUAL
                             isNonFoldableBypassed = true
                             showClockScreen = true
@@ -3566,15 +3588,17 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
 
     override fun onResume() {
         super.onResume()
+        if (screenOffRequested || isFinishing) return
         val keyguard = getSystemService(KeyguardManager::class.java)
+        val activelyUnlocked = getSystemService(PowerManager::class.java).isInteractive && !keyguard.isKeyguardLocked
         if (entryMode == ClockEntryMode.LOCK_SCREEN) {
-            if (!keyguard.isKeyguardLocked) { ClockCycleStore(this).onUnlock(); clearLockedWindow(); finish(); return }
+            if (activelyUnlocked) { ClockCycleStore(this).observeUnlocked(); clearLockedWindow(); finish(); return }
             lockPresentationAcknowledged = true
             sessionHandler.removeCallbacksAndMessages(null)
             ClockCycleStore(this).invalidateOffer()
             getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
-        } else if (!hasHingeSensor && !keyguard.isKeyguardLocked) {
-            ClockCycleStore(this).onUnlock()
+        } else if (!hasHingeSensor && activelyUnlocked) {
+            ClockCycleStore(this).observeUnlocked()
             ClockActivationHost.attach(this)
             val autoSettings=com.linzin.linzindeskclock.settings.AutoClockPreferences(this)
             if(autoSettings.enabled && !AutoClockService.running && !shouldPauseAutoClockForLowBattery(this)) {
@@ -3656,6 +3680,7 @@ class MainActivity : ComponentActivity(), SensorEventListener, ClockActivationHo
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
+        if (screenOffRequested || isFinishing) return
         if (event?.sensor?.type == Sensor.TYPE_HINGE_ANGLE) {
             val currentAngle = event.values[0]
             lastRecordedHingeAngle = currentAngle

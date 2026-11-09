@@ -35,11 +35,11 @@ jobs:
           command: bash scripts/run-circleci-validation.sh prepare
           no_output_timeout: 10m
       - run:
-          name: Build APKs, validate 156 JVM tests and lint
+          name: Build APKs, validate 160 JVM tests and lint
           command: bash scripts/run-circleci-validation.sh build
           no_output_timeout: 20m
       - run:
-          name: Run all 83 tests and background-clock checks on dedicated API 35 AVD
+          name: Run all 92 tests and background-clock checks on dedicated API 35 AVD
           command: bash scripts/run-circleci-validation.sh emulator
           no_output_timeout: 25m
       - run:

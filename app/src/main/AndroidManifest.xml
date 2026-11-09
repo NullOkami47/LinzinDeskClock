@@ -46,6 +46,14 @@
         <activity android:name=".autostart.ClockSessionActivity" android:exported="false"
             android:showWhenLocked="true" android:turnScreenOn="true"
             android:excludeFromRecents="true" android:taskAffinity="" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
+        <receiver android:name=".power.ScreenOffAdminReceiver"
+            android:label="@string/screen_off_admin_label"
+            android:description="@string/screen_off_admin_description"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data android:name="android.app.device_admin" android:resource="@xml/screen_off_admin" />
+            <intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED" /></intent-filter>
+        </receiver>
         <receiver android:name=".service.ClockMonitorRestoreReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

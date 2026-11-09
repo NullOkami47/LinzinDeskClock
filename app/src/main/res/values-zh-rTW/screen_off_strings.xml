@@ -1,0 +1,14 @@
+<resources>
+    <string name="screen_off_admin_label">Linzin 桌面時鐘關閉螢幕</string>
+    <string name="screen_off_admin_description">選用的裝置管理員權限，可在時鐘倒數結束時鎖定裝置並關閉螢幕。僅要求強制鎖定政策。</string>
+    <string name="screen_off_admin_explanation">若要在倒數結束時立即關閉螢幕，需由你自行啟用選用的「僅鎖定」裝置管理員權限。這項權限僅允許應用程式鎖定裝置。系統鎖定後，可能需要輸入 PIN 碼、圖案或密碼才能解鎖。</string>
+    <string name="screen_off_permission_failed">無法開啟關閉螢幕的權限設定。你可以重試，或不授予這項選用權限並繼續使用。</string>
+    <string name="screen_off_fallback_message">未啟用「僅鎖定」裝置管理員權限時，倒數結束會退出時鐘，螢幕將依系統原有的螢幕逾時設定關閉。</string>
+    <string name="screen_off_permission_title">立即關閉螢幕（選用）</string>
+    <string name="screen_off_permission_granted">已啟用「僅鎖定」裝置管理員權限，倒數結束時可鎖定裝置並關閉螢幕。</string>
+    <string name="screen_off_permission_not_granted">尚未啟用「僅鎖定」裝置管理員權限。</string>
+    <string name="screen_off_permission_unsupported">此裝置不支援「僅鎖定」裝置管理員權限。</string>
+    <string name="screen_off_permission_enable">啟用「僅鎖定」裝置管理員</string>
+    <string name="screen_off_permission_locked">請先解鎖裝置，再啟用關閉螢幕的權限。</string>
+    <string name="screen_off_timeout_fallback">目前無法立即關閉螢幕，已退出時鐘。螢幕將依系統原有的螢幕逾時設定關閉。</string>
+</resources>

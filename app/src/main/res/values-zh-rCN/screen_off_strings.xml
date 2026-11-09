@@ -1,0 +1,14 @@
+<resources>
+    <string name="screen_off_admin_label">Linzin 桌面时钟关闭屏幕</string>
+    <string name="screen_off_admin_description">可选的设备管理员权限，可在时钟倒计时结束时锁定设备并关闭屏幕。仅请求强制锁定策略。</string>
+    <string name="screen_off_admin_explanation">如需在倒计时结束时立即关闭屏幕，需要你自行启用可选的“仅锁定”设备管理员权限。此权限仅允许应用锁定设备。系统锁定后，可能需要输入 PIN 码、图案或密码才能解锁。</string>
+    <string name="screen_off_permission_failed">无法打开关闭屏幕的权限设置。你可以重试，或不授予此可选权限并继续使用。</string>
+    <string name="screen_off_fallback_message">未启用“仅锁定”设备管理员权限时，倒计时结束会退出时钟，屏幕将按系统原有的屏幕超时设置关闭。</string>
+    <string name="screen_off_permission_title">立即关闭屏幕（可选）</string>
+    <string name="screen_off_permission_granted">已启用“仅锁定”设备管理员权限，倒计时结束时可锁定设备并关闭屏幕。</string>
+    <string name="screen_off_permission_not_granted">尚未启用“仅锁定”设备管理员权限。</string>
+    <string name="screen_off_permission_unsupported">此设备不支持“仅锁定”设备管理员权限。</string>
+    <string name="screen_off_permission_enable">启用“仅锁定”设备管理员</string>
+    <string name="screen_off_permission_locked">请先解锁设备，再启用关闭屏幕的权限。</string>
+    <string name="screen_off_timeout_fallback">目前无法立即关闭屏幕，已退出时钟。屏幕将按系统原有的屏幕超时设置关闭。</string>
+</resources>

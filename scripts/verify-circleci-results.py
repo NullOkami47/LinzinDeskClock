@@ -13,8 +13,8 @@ import unittest
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-JVM_TESTS = 156
-ANDROID_TESTS = 83
+JVM_TESTS = 160
+ANDROID_TESTS = 92
 JDK_RELEASE = "jdk-25.0.5+8"
 JDK_NAME = "OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz"
 # Adoptium release_name metadata, Linux x64/HotSpot, verified 2026-11-09.
@@ -141,7 +141,7 @@ def build_result(root):
 
 def instrumentation_junit(result):
     # A single aggregate gate, not fabricated per-test results. The raw runner
-    # transcript is the authoritative evidence for the 83 Android test cases.
+    # transcript is the authoritative evidence for the 92 Android test cases.
     suite = ET.Element("testsuite", name="CircleCI.InstrumentationGate", tests="1", failures="0", errors="0", skipped="0")
     ET.SubElement(suite, "testcase", classname="CircleCI.InstrumentationGate", name=f"all_{result['tests']}_tests_complete_without_failures_or_skips")
     return ET.tostring(suite, encoding="unicode") + "\n"
@@ -213,17 +213,17 @@ class ParserTests(unittest.TestCase):
         return ("INSTRUMENTATION_STATUS: media_presentation_capture=/fixture.png\n"
                 "INSTRUMENTATION_STATUS_CODE: 0\nINSTRUMENTATION_STATUS_CODE: 1\n"
                 "INSTRUMENTATION_STATUS_CODE: 2\nINSTRUMENTATION_STATUS_CODE: 0\n"
-                "INSTRUMENTATION_RESULT: stream=\nTime: 123.4\n\nOK (83 tests)\n\nINSTRUMENTATION_CODE: -1\n")
+                "INSTRUMENTATION_RESULT: stream=\nTime: 123.4\n\nOK (92 tests)\n\nINSTRUMENTATION_CODE: -1\n")
 
     def test_jvm_accepts_real_case_counts(self):
-        self.assertEqual(check_jvm([self.junit()])["tests"], 156)
-        self.assertEqual(check_jvm([self.junit(100), self.junit(56, suffix="Other")])["tests"], 156)
+        self.assertEqual(check_jvm([self.junit()])["tests"], 160)
+        self.assertEqual(check_jvm([self.junit(100), self.junit(60, suffix="Other")])["tests"], 160)
 
     def test_jvm_rejects_invalid_evidence(self):
         good = self.junit()
-        cases = [[], [self.junit(155)], [self.junit(157)], [self.junit(0)], [good, good],
+        cases = [[], [self.junit(159)], [self.junit(161)], [self.junit(0)], [good, good],
                  [self.junit(failures="1")], [self.junit(errors="1")], [self.junit(skipped="1")],
-                 [self.junit(tests="157")], [self.junit(errors="NaN")], [self.junit(errors="-1")],
+                 [self.junit(tests="161")], [self.junit(errors="NaN")], [self.junit(errors="-1")],
                  [good.replace(' errors="0"', '')], [good.replace('name="test0"', 'name="test1"')],
                  ['<testsuite'], ['<testsuites/>'], ['<!DOCTYPE testsuite>' + good]]
         for tag in ("failure", "error", "skipped"):
@@ -234,12 +234,12 @@ class ParserTests(unittest.TestCase):
 
     def test_instrumentation_accepts_crlf_and_capture_zeros(self):
         for text in (self.instrumentation(), self.instrumentation().replace("\n", "\r\n")):
-            self.assertEqual(check_instrumentation(text)["tests"], 83)
+            self.assertEqual(check_instrumentation(text)["tests"], 92)
 
     def test_instrumentation_rejects_partial_or_abnormal_runs(self):
         good = self.instrumentation()
-        cases = [good.replace("83 tests", f"{n} tests") for n in (0, 82, 84)]
-        cases += [good.replace("OK (83 tests)", ""), good.replace("OK (83 tests)", "OK (83 tests)\nOK (83 tests)"),
+        cases = [good.replace("92 tests", f"{n} tests") for n in (0, 91, 93)]
+        cases += [good.replace("OK (92 tests)", ""), good.replace("OK (92 tests)", "OK (92 tests)\nOK (92 tests)"),
                   good.replace("INSTRUMENTATION_CODE: -1", ""), good.replace("INSTRUMENTATION_CODE: -1", "INSTRUMENTATION_CODE: 0"),
                   good + "INSTRUMENTATION_CODE: -1", good + "Process crashed", "INSTRUMENTATION_CODE: -1\n" + good,
                   re.sub(r"INSTRUMENTATION_STATUS_CODE:[^\n]*\n", "", good)]
@@ -300,10 +300,10 @@ def real_report_tests(root):
             self.assertEqual(result["warnings"], sum(n.get("severity") == "Warning" for n in issues))
             self.assertEqual(result["hints"], sum(n.get("severity") == "Hint" for n in issues))
 
-        def test_existing_156_jvm_tests(self):
+        def test_existing_160_jvm_tests(self):
             files = sorted((root / "app/build/test-results/testDebugUnitTest").glob("TEST-*.xml"))
             result = check_jvm([file.read_text(encoding="utf-8") for file in files])
-            self.assertEqual(result, {"success": True, "tests": 156, "failures": 0, "errors": 0, "skipped": 0})
+            self.assertEqual(result, {"success": True, "tests": 160, "failures": 0, "errors": 0, "skipped": 0})
 
     return unittest.defaultTestLoader.loadTestsFromTestCase(RealReportTests)
 

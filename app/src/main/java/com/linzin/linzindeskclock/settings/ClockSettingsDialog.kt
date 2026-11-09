@@ -532,6 +532,8 @@ fun ClockSettingsDialog(
                         }
                     }
 
+                    ScreenOffPermissionSection(timeoutMillis = timeoutMillis)
+
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
 
                     LowBatterySettingsSection()

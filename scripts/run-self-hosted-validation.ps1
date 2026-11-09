@@ -3,8 +3,8 @@ param([switch]$PreflightOnly, [string]$ExpectedBranch = 'feat/desk-clock-v2', [s
 
 $ErrorActionPreference = 'Stop'
 # Reviewed suite counts: update explicitly when tests are added; never infer from run output.
-$expectedAndroidTests = 83
-$expectedJvmTests = 156
+$expectedAndroidTests = 92
+$expectedJvmTests = 160
 $qaRoot = 'D:\codex-tools\linzin-android\runner-QA'
 $toolRoot = Join-Path $qaRoot 'toolchain'
 $projectRoot = Split-Path -Parent $PSScriptRoot

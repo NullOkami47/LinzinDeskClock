@@ -37,6 +37,18 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
     private var accepted = false
     private var lockWindow: ClockLockWindow? = null
     private var ending = false
+    private var screenOffRequested = false
+    private val screenOffController by lazy {
+        com.linzin.linzindeskclock.power.ScreenOffController(this, window,
+            prepareHost = {
+                screenOffRequested = true
+                ending = true
+                deadlineHandler.removeCallbacksAndMessages(null)
+                ClockDreamBridge.scans.detach(this)
+                scan?.cancel()
+                isScreenBright = false
+            }, finishHost = { finish() })
+    }
     private fun eligibleLockContext(): Boolean = !ending &&
         !(getSystemService(android.os.PowerManager::class.java).isInteractive && !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
     private var registered = false
@@ -67,6 +79,7 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
     }
     override fun onDreamingStarted() {
         super.onDreamingStarted()
+        if (screenOffRequested) { finish(); return }
         ending = false
         accepted = false
         exit = ClockExitController(this) { scan?.manualExit(); finish() }
@@ -104,12 +117,14 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
         finish()
     }
     private fun renderClock() {
+        if (ending || screenOffRequested) return
         val view = compose ?: return
         accepted = true
         deadlineHandler.removeCallbacksAndMessages(null)
         isScreenBright = true
         view.setContent { MaterialTheme(colorScheme=DeskClockColorScheme) {
-            DeskClockScreen(hasHingeSensor=false,entryMode=ClockEntryMode.DREAM,windowOverride=window,onExit={ exit.exit() })
+            DeskClockScreen(hasHingeSensor=false,entryMode=ClockEntryMode.DREAM,windowOverride=window,onExit={ exit.exit() },
+                onScreenOff={ screenOffController.request() })
         } }
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -117,6 +132,7 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
         return super.dispatchKeyEvent(event)
     }
     override fun onWakeUp() {
+        if (screenOffRequested) { finish(); return }
         ending=true; deadlineHandler.removeCallbacksAndMessages(null); scan?.cancel()
         val unlocked = getSystemService(android.os.PowerManager::class.java).isInteractive &&
             !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked

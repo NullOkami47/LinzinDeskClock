@@ -59,7 +59,13 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
         revision++
     }
     val notificationRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { startMonitor() }
+    val noteExplicitEntry: () -> Unit = {
+        com.linzin.linzindeskclock.autostart.ClockCycleStore(context).onExplicitUserEntry(
+            context.getSystemService(android.os.PowerManager::class.java).isInteractive,
+            context.getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+    }
     val enableMonitor: () -> Unit = {
+        noteExplicitEntry()
         enabled=true; settings.enabled=true
         if(Build.VERSION.SDK_INT>=33 && ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED &&
             !settings.preferences.getBoolean("auto_notification_asked",false)) {
@@ -114,7 +120,7 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
             !noticesAllowed -> R.string.auto_status_notifications
             else -> R.string.auto_status_ready
         }),fontSize=13.sp)
-        if(enabled && !running) TextButton(onClick=startMonitor) { Text(stringResource(R.string.auto_restart)) }
+        if(enabled && !running) TextButton(onClick={ noteExplicitEntry(); startMonitor() }) { Text(stringResource(R.string.auto_restart)) }
         if(!noticesAllowed) TextButton(onClick={ openSetup(context,Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName)) }) {
             Text(stringResource(R.string.auto_notification_setup))
         }
@@ -148,6 +154,7 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
         title={ Text(stringResource(R.string.auto_background_enable)) },
         text={ Text(stringResource(R.string.auto_background_explanation)) },
         confirmButton={ TextButton(onClick={
+            noteExplicitEntry()
             explainAccess=false; automatic=true; settings.automaticLaunch=true
             enabled=true; settings.enabled=true; startMonitor()
             if(!BackgroundLaunchAccess.granted(context) && !BackgroundLaunchAccess.openSettings(context)) showUnavailable(context)

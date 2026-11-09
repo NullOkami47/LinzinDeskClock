@@ -63,6 +63,18 @@ class ClockCycleStore(
     val suppressed: Boolean
         get() = synchronized(prefs) { writeFailed || read().suppressed }
 
+    /** A foreground/screen-on observation is not proof of a new unlock after an explicit exit. */
+    fun observeUnlocked() {
+        synchronized(prefs) {
+            if (!suppressed) onUnlock()
+        }
+    }
+
+    /** Only an explicit foreground user action can recover a missed unlock broadcast. */
+    fun onExplicitUserEntry(interactive: Boolean, keyguardLocked: Boolean) {
+        if (interactive && !keyguardLocked) onUnlock()
+    }
+
     fun onUnlock() {
         synchronized(prefs) {
             if (write(ClockCycleRecord(armed = true))) {

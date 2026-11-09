@@ -277,7 +277,7 @@ package_artifacts() {
   "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs \
     app/build/outputs/apk/debug/app-debug.apk > "$EVIDENCE/evidence/debug-apk-certificate.txt"
   "$PYTHON" -I -B "$VERIFY" package --root "$ROOT"
-  printf 'CIRCLECI_VALIDATION_PASSED: 156 JVM tests, lint, 83 instrumentation tests and background clock.\n'
+  printf 'CIRCLECI_VALIDATION_PASSED: 160 JVM tests, lint, 92 instrumentation tests and background clock.\n'
 }
 
 collect_reports() {

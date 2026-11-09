@@ -64,7 +64,10 @@ import androidx.core.content.ContextCompat
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.withContext
 import com.linzin.linzindeskclock.autostart.ClockEntryMode
 import com.linzin.linzindeskclock.ui.ClockExitOverlay
@@ -84,7 +87,8 @@ fun DeskClockScreen(
     entryMode: ClockEntryMode = ClockEntryMode.MANUAL,
     windowOverride: Window? = null,
     onExit: () -> Unit = {},
-    onLowBatteryExit: () -> Unit = onExit
+    onLowBatteryExit: () -> Unit = onExit,
+    onScreenOff: () -> Unit = onExit
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -188,7 +192,9 @@ fun DeskClockScreen(
     var isSettingsOpen by remember { mutableStateOf(false) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var isBurnInProtectionActive by remember { mutableStateOf(false) }
-    var isFakeSleeping by remember { mutableStateOf(false) }
+    var timeoutFired by remember { mutableStateOf(false) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val screenOff by rememberUpdatedState(onScreenOff)
 
     val batteryState = rememberBatteryState()
     val batteryPrefs=remember { LowBatteryPreferences(context) }
@@ -320,16 +326,15 @@ fun DeskClockScreen(
 
     SystemBarsController(hideSystemBars = true)
 
-    LaunchedEffect(manualBrightness, brightnessValue, isFakeSleeping, batteryAction) {
+    LaunchedEffect(manualBrightness, brightnessValue, batteryAction) {
         window?.let { w ->
             val layoutParams = w.attributes
             val requested = when {
-                isFakeSleeping -> 0.0f
                 manualBrightness -> brightnessValue.coerceIn(0.01f,1f)
                 else -> WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
             val systemBrightness=runCatching { Settings.System.getInt(context.contentResolver,Settings.System.SCREEN_BRIGHTNESS,128)/255f }.getOrDefault(.5f)
-            layoutParams.screenBrightness=if(isFakeSleeping) 0f else LowBatteryPolicy.brightness(requested,systemBrightness,batteryAction)
+            layoutParams.screenBrightness=LowBatteryPolicy.brightness(requested,systemBrightness,batteryAction)
             w.attributes = layoutParams
         }
     }
@@ -341,39 +346,29 @@ fun DeskClockScreen(
         }
     }
 
-    LaunchedEffect(lastInteractionTime, timeoutMillis) {
+    LaunchedEffect(lastInteractionTime) {
         isBurnInProtectionActive = false
-        isFakeSleeping = false
+        delay(60_000L)
+        isBurnInProtectionActive = true
+    }
 
-        launch {
-            delay(60_000L)
-            isBurnInProtectionActive = true
-        }
-
-        val systemTimeout = try {
-            Settings.System.getInt(
-                context.contentResolver,
-                Settings.System.SCREEN_OFF_TIMEOUT,
-                15_000
-            ).toLong()
-        } catch (e: Exception) {
-            15_000L
-        }
-
-        when {
-            timeoutMillis < 0L -> {
+    LaunchedEffect(lifecycle, window, lastInteractionTime, timeoutMillis, isSettingsOpen) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            if (!timeoutFired) {
                 window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-            timeoutMillis >= systemTimeout -> {
-                window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                val appWaitMillis = (timeoutMillis - systemTimeout).coerceAtLeast(0L)
-                delay(appWaitMillis)
-                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-            else -> {
-                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                delay(timeoutMillis)
-                isFakeSleeping = true
+                try {
+                    // A settings/permission visit and a new foreground visit each start a fresh wait.
+                    if (!isSettingsOpen && timeoutMillis >= 0L) {
+                        delay(timeoutMillis)
+                        timeoutFired = true
+                        window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        screenOff()
+                    } else {
+                        awaitCancellation()
+                    }
+                } finally {
+                    window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
             }
         }
     }
@@ -388,11 +383,7 @@ fun DeskClockScreen(
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         if (event.changes.any { it.pressed || it.previousPressed != it.pressed }) {
                             lastInteractionTime = System.currentTimeMillis()
-                            if (isFakeSleeping) {
-                                isFakeSleeping = false
-                            } else {
-                                showSettingsIcon = true
-                            }
+                            showSettingsIcon = true
                         }
                     }
                 }
@@ -449,7 +440,7 @@ fun DeskClockScreen(
         }
 
         AnimatedVisibility(
-            visible = showSettingsIcon && !isFakeSleeping,
+            visible = showSettingsIcon,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -498,14 +489,6 @@ fun DeskClockScreen(
                     }
                 }
             }
-        }
-
-        if (isFakeSleeping) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            )
         }
 
         if (isSettingsOpen && allowSettings) {
