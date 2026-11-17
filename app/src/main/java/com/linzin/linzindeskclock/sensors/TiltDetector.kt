@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.sensors
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.content.Context
 import android.graphics.Point
 import android.hardware.Sensor
@@ -13,10 +15,10 @@ import kotlin.math.abs
 
 /** Owned by a bounded scan. No listener exists outside start/stop. */
 class TiltDetector(context: Context, private val onReading: (TiltReading) -> Unit) : SensorEventListener {
-    private val manager = context.getSystemService(SensorManager::class.java)
+    private val manager = context.clockSystemService(SensorManager::class.java)
     private val sensor = manager.getDefaultSensor(Sensor.TYPE_GRAVITY)
         ?: manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    private val display = context.getSystemService(WindowManager::class.java).defaultDisplay
+    private val display = context.clockSystemService(WindowManager::class.java).defaultDisplay
     private var filtered: FloatArray? = null
     private val timing = SensorTiming()
     private var stablePose = false

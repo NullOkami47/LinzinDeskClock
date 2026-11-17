@@ -4,6 +4,12 @@
 
     <string name="initial_prompt_fold">請將手機半摺\n以在外螢幕啟用桌面時鐘</string>
 
+    <!-- 小摺疊提示對話框 -->
+    <string name="clamshell_notice_title">直立小摺疊使用提示</string>
+    <string name="clamshell_notice_desc">偵測到您目前使用的是上下摺疊的直立小摺疊機。\n\n目前多數品牌受限於原廠系統限制，半摺後可能無法順利在外螢幕接續顯示時鐘（目前實測僅 Motorola razr 40 Ultra 之後的機種支援外螢幕正常接續）。\n\n您可以先嘗試將手機半摺看看；若外螢幕無法正常顯示，建議您完全攤開手機，並以橫向擺放方式使用內螢幕時鐘。</string>
+    <string name="clamshell_notice_btn_try">我知道了，我試試看</string>
+    <string name="clamshell_notice_btn_fail">外螢幕無法正常顯示</string>
+
     <!-- 手勢教學引導遮罩 -->
     <string name="tutorial_title">手勢操作指南</string>
     <string name="tutorial_single_tap_title">單指單觸</string>
@@ -55,6 +61,9 @@
     <string name="current_location">目前位置</string>
     <string name="weather_disabled_title">尚未啟用天氣資訊</string>
     <string name="weather_disabled_desc">請點擊右上角 ⚙ 設定\n開啟「啟用當地天氣資訊」\n並授予位置權限即可顯示</string>
+    <string name="weather_unavailable_title">尚未取得天氣資訊</string>
+    <string name="weather_unavailable_desc">目前無法取得定位或網路資料\n點擊此處手動重新整理</string>
+    <string name="weather_refreshing_title">正在更新天氣資訊…</string>
 
     <!-- 設定對話框：行事曆行程設定 -->
     <string name="pref_calendar_title">顯示行事曆近期行程</string>
@@ -85,6 +94,8 @@
     <string name="pref_burn_in_desc">定時微幅抖動畫面像素以保護 OLED 螢幕 (預設開啟)</string>
     <string name="pref_flip_180_title">強制畫面 180° 反轉</string>
     <string name="pref_flip_180_desc">鎖定螢幕旋轉並反轉 180°，修正小摺疊機外螢幕或帳篷模式畫面倒置問題</string>
+    <string name="pref_cutout_title">全螢幕延伸至挖孔區域</string>
+    <string name="pref_cutout_desc">關閉後將在鏡頭挖孔側保留黑邊，避免遮擋角落資訊</string>
     <string name="pref_brightness_title">手動調整亮度</string>
     <string name="pref_brightness_desc_manual">自訂視窗亮度</string>
     <string name="pref_brightness_desc_auto">跟隨系統自動設定</string>
@@ -125,4 +136,14 @@
 
     <string name="settings_update_failed">檢查更新失敗，請確認網路連線。</string>
     <string name="settings_update_current">目前已是最新版本（%1$s）。</string>
+    <!-- Android 12 以下老機型提示視窗 -->
+    <string name="legacy_android_dialog_title">舊版 Android 系統相容性提示</string>
+    <string name="legacy_android_dialog_desc">偵測到您的裝置系統為 Android 12 或更早版本，部分依賴新系統 API 的功能將受限或無法運作：\n\n• 摺疊機感應：Android 10 以下不支援轉軸角度與自動外螢幕切換，將以一般螢幕模式執行。\n• 防烙印交錯保護：像素級著色器（Shader）僅支援 Android 13 以上系統。\n• 挖孔黑邊切換：瀏海與挖孔邊界控制僅支援 Android 9.0 以上系統。\n• 當地天氣定位：舊版系統定位可能較慢；必要時會使用已儲存座標或網路概略位置。</string>
+    <string name="legacy_android_dialog_btn_ok">我知道了</string>
+
+    <!-- 設定頁面不支援提示 -->
+    <string name="pref_burn_in_unsupported">需 Android 13 以上系統方可支援</string>
+    <string name="pref_cutout_unsupported">需 Android 9.0 以上系統方可支援</string>
+
+    <string name="auto_legacy_unsupported">鎖定自動啟動需 Android 7.0 以上；您仍可手動開啟時鐘。</string>
 </resources>

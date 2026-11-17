@@ -11,9 +11,11 @@
 | Android Gradle Plugin | 9.4.1 |
 | Android 平台 | platforms;android-37.0 |
 | Android Build Tools | 36.0.0 |
-| minSdk / compileSdk / targetSdk | 31 / 37 / 37 |
+| minSdk / compileSdk / targetSdk | 21 / 37 / 37 |
 | Kotlin Compose plugin | 2.2.10 |
-| Lifecycle runtime | 2.10.0 |
+| Lifecycle runtime | 2.8.7 |
+| Compose runtime / UI | 1.7.8 |
+| Java 核心函式庫相容層 | desugar_jdk_libs 2.1.5 |
 
 ## 建置
 

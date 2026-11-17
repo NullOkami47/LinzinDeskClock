@@ -3,6 +3,12 @@
 
     <string name="initial_prompt_fold">Please fold the device halfway\nto activate Desk Clock on the cover screen.</string>
 
+    <!-- Clamshell Notice Dialog -->
+    <string name="clamshell_notice_title">Notice for Flip Foldables</string>
+    <string name="clamshell_notice_desc">We detected that you are using a vertical clamshell flip foldable.\n\nDue to OEM system restrictions, most flip devices cannot automatically display the clock on the cover screen when half-folded (currently verified only on Motorola razr 40 Ultra and newer).\n\nYou can try half-folding your phone first. If the cover screen cannot display the clock, please unfold the phone completely and use it in landscape orientation.</string>
+    <string name="clamshell_notice_btn_try">Got it, let me try</string>
+    <string name="clamshell_notice_btn_fail">Cover screen doesn\'t work</string>
+
     <!-- Gesture Tutorial Overlay -->
     <string name="tutorial_title">Gesture Guide</string>
     <string name="tutorial_single_tap_title">Single Tap</string>
@@ -54,6 +60,9 @@
     <string name="current_location">Current Location</string>
     <string name="weather_disabled_title">Weather Disabled</string>
     <string name="weather_disabled_desc">Tap ⚙ Settings in top right\nto enable Local Weather\nand grant location access.</string>
+    <string name="weather_unavailable_title">Weather Unavailable</string>
+    <string name="weather_unavailable_desc">Unable to retrieve location or network data.\nTap here to retry.</string>
+    <string name="weather_refreshing_title">Updating weather…</string>
 
     <!-- Settings Dialog: Calendar Events -->
     <string name="pref_calendar_title">Show Upcoming Calendar Events</string>
@@ -87,6 +96,8 @@
     <string name="pref_burn_in_desc">Subtly dither display periodically to protect OLED panels (Default on)</string>
     <string name="pref_flip_180_title">Force Flip Screen 180°</string>
     <string name="pref_flip_180_desc">Lock auto-rotation and rotate 180° to fix upside-down display on flip foldables</string>
+    <string name="pref_cutout_title">Extend into camera cutout</string>
+    <string name="pref_cutout_desc">Turn off to keep a black bar on the notch/punch-hole side</string>
     <string name="pref_brightness_title">Manual Brightness</string>
     <string name="pref_brightness_desc_manual">Custom brightness</string>
     <string name="pref_brightness_desc_auto">Follow system auto brightness</string>
@@ -127,4 +138,12 @@
 
     <string name="settings_update_failed">Unable to check for updates. Please check your network connection.</string>
     <string name="settings_update_current">You are using the latest version (%1$s).</string>
+    <string name="legacy_android_dialog_title">Legacy Android Compatibility Notice</string>
+    <string name="legacy_android_dialog_desc">Your device is running Android 12 or earlier. Some features that rely on newer system APIs will be unavailable or limited:\n\n• Foldable Sensing: Hinge angle and auto cover-screen switching require Android 11+. Standard display mode will be used.\n• Burn-in Pixel Grid Protection: RuntimeShader requires Android 13 or later.\n• Cutout Black Bar Toggle: Display cutout insets require Android 9.0 or later.\n• Weather Location: Older versions may take longer to obtain a location. Saved coordinates or approximate network location are used when available.</string>
+    <string name="legacy_android_dialog_btn_ok">Got It</string>
+
+    <string name="pref_burn_in_unsupported">Requires Android 13 or later</string>
+    <string name="pref_cutout_unsupported">Requires Android 9.0 or later</string>
+
+    <string name="auto_legacy_unsupported">Automatic entry on lock requires Android 7.0 or later. You can still open the clock manually.</string>
 </resources>

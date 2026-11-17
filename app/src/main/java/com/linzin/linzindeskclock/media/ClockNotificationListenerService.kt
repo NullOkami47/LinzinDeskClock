@@ -1,6 +1,10 @@
 package com.linzin.linzindeskclock.media
 
 import android.content.Intent
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.IBinder
 import android.service.notification.NotificationListenerService
 import androidx.annotation.MainThread
 
@@ -9,28 +13,51 @@ import androidx.annotation.MainThread
  * Must be declared in the application's process with BIND_NOTIFICATION_LISTENER_SERVICE.
  */
 class ClockNotificationListenerService : NotificationListenerService() {
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var destroyed = false
+    private var unbound = false
+
+    private fun notifyConnection(connected: Boolean) {
+        val update = {
+            if (connected) {
+                if (!destroyed && !unbound) MediaListenerConnection.connected(this)
+            } else MediaListenerConnection.disconnected(this)
+        }
+        // Android versions before N do not guarantee notification callbacks on the main thread.
+        if (Looper.myLooper() == Looper.getMainLooper()) update() else mainHandler.post { update() }
+    }
+
+    override fun onBind(intent: Intent): IBinder? {
+        unbound = false
+        return super.onBind(intent)
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
-        MediaListenerConnection.connected(this)
+        notifyConnection(true)
     }
 
     override fun onListenerDisconnected() {
-        MediaListenerConnection.disconnected(this)
-        super.onListenerDisconnected()
+        notifyConnection(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) super.onListenerDisconnected()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        unbound = true
+        mainHandler.removeCallbacksAndMessages(null)
         MediaListenerConnection.disconnected(this)
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
+        destroyed = true
+        mainHandler.removeCallbacksAndMessages(null)
         MediaListenerConnection.disconnected(this)
         super.onDestroy()
     }
 }
 
-/** All listener/service/repository callbacks run on the main thread (API 31+). */
+/** Listener callbacks are marshalled onto the main thread, including on Android 5 and 6. */
 @MainThread
 internal object MediaListenerConnection {
     private var owner: ClockNotificationListenerService? = null

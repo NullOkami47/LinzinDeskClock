@@ -3,6 +3,7 @@ package com.linzin.linzindeskclock.autostart
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.SystemClock
+import android.os.Build
 import android.provider.Settings
 import java.util.UUID
 import java.util.WeakHashMap
@@ -20,7 +21,7 @@ class ClockCycleStore(
     constructor(context: Context) : this(
         context.getSharedPreferences("clock_cycle", Context.MODE_PRIVATE),
         { SystemClock.elapsedRealtime() },
-        { Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1) },
+        { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1) else -1 },
         { UUID.randomUUID().toString() },
     )
 

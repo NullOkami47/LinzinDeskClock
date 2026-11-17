@@ -1,5 +1,9 @@
 package com.linzin.linzindeskclock.power
 
+import androidx.core.content.ContextCompat
+
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.admin.DeviceAdminReceiver
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
@@ -17,10 +21,10 @@ object ScreenOffAccess {
 
     fun isSupported(context: Context): Boolean =
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_DEVICE_ADMIN) &&
-            context.getSystemService(DevicePolicyManager::class.java) != null
+            ContextCompat.getSystemService(context, DevicePolicyManager::class.java) != null
 
     fun isGranted(context: Context): Boolean = isSupported(context) && runCatching {
-        context.getSystemService(DevicePolicyManager::class.java).isAdminActive(component(context))
+        context.clockSystemService(DevicePolicyManager::class.java).isAdminActive(component(context))
     }.getOrDefault(false)
 
     fun activationIntent(context: Context): Intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
@@ -31,7 +35,7 @@ object ScreenOffAccess {
     fun lockNow(context: Context): Boolean {
         if (!isGranted(context)) return false
         return try {
-            context.getSystemService(DevicePolicyManager::class.java).lockNow()
+            context.clockSystemService(DevicePolicyManager::class.java).lockNow()
             true
         } catch (error: RuntimeException) {
             Log.w("ScreenOff", "System lock unavailable; releasing the clock window", error)

@@ -1,5 +1,9 @@
 package com.linzin.linzindeskclock.autostart
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+import com.linzin.linzindeskclock.compat.setClockShowWhenLocked
+import com.linzin.linzindeskclock.compat.setClockTurnScreenOn
+
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
@@ -33,15 +37,15 @@ class ClockSessionActivity : AppCompatActivity() {
         com.linzin.linzindeskclock.power.ScreenOffController(this, window,
             prepareHost = {
                 screenOffRequested = true
-                setTurnScreenOn(false)
-                setShowWhenLocked(false)
+                setClockTurnScreenOn(false)
+                setClockShowWhenLocked(false)
             }, finishHost = { finish() })
     }
     private lateinit var exit: ClockExitController
     private lateinit var sessionState: ClockSessionState
     private val unlock = object : BroadcastReceiver() {
         override fun onReceive(context: Context,intent: Intent) {
-            if(intent.action==Intent.ACTION_USER_PRESENT && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            if(intent.action==Intent.ACTION_USER_PRESENT && !clockSystemService(KeyguardManager::class.java).isKeyguardLocked) {
                 ClockCycleStore(this@ClockSessionActivity).onUnlock(); finish()
             }
         }
@@ -52,8 +56,8 @@ class ClockSessionActivity : AppCompatActivity() {
         val retained=ViewModelProvider(this)[ClockSessionState::class.java]
         sessionState=retained
         val automatic = retained.authorisedCycle?.let { retained.automatic } ?: intent.getBooleanExtra("automatic",false)
-        val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        val interactive = getSystemService(PowerManager::class.java).isInteractive
+        val locked = clockSystemService(KeyguardManager::class.java).isKeyguardLocked
+        val interactive = clockSystemService(PowerManager::class.java).isInteractive
         val settings = AutoClockPreferences(this)
         val retainedCycle=retained.authorisedCycle
         val accepted = if(retainedCycle != null) {
@@ -74,7 +78,7 @@ class ClockSessionActivity : AppCompatActivity() {
         enableEdgeToEdge(); requestedOrientation = preferredClockOrientation(this, false)
         window.setBackgroundDrawableResource(android.R.color.black)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        setShowWhenLocked(true); setTurnScreenOn(!retained.presented)
+        setClockShowWhenLocked(true); setClockTurnScreenOn(!retained.presented)
         ContextCompat.registerReceiver(this,unlock,IntentFilter(Intent.ACTION_USER_PRESENT),ContextCompat.RECEIVER_EXPORTED)
         registered = true
         onBackPressedDispatcher.addCallback(this,object : OnBackPressedCallback(true) { override fun handleOnBackPressed() { exit.exit() } })
@@ -86,18 +90,18 @@ class ClockSessionActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if(screenOffRequested || isFinishing || !::exit.isInitialized) return
-        if(!sessionState.presented) setTurnScreenOn(true)
-        if(getSystemService(PowerManager::class.java).isInteractive && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+        if(!sessionState.presented) setClockTurnScreenOn(true)
+        if(clockSystemService(PowerManager::class.java).isInteractive && !clockSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             ClockCycleStore(this).observeUnlocked(); finish()
         }
     }
     override fun onWindowFocusChanged(hasFocus:Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if(hasFocus && ::exit.isInitialized && !isFinishing && getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+        if(hasFocus && ::exit.isInitialized && !isFinishing && clockSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             sessionState.presented=true
-            setTurnScreenOn(false)
+            setClockTurnScreenOn(false)
             AutoClockPreferences(this).lastActivation="SHOWN"
-            getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
+            clockSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
         }
     }
     override fun onUserLeaveHint() {
@@ -106,7 +110,7 @@ class ClockSessionActivity : AppCompatActivity() {
     }
     override fun onPause() {
         super.onPause()
-        if(::sessionState.isInitialized && sessionState.presented) setTurnScreenOn(false)
+        if(::sessionState.isInitialized && sessionState.presented) setClockTurnScreenOn(false)
     }
     override fun onStop() {
         super.onStop()
@@ -118,7 +122,7 @@ class ClockSessionActivity : AppCompatActivity() {
         if(registered) unregisterReceiver(unlock)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_SECURE)
         window.attributes = window.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
-        setShowWhenLocked(false); setTurnScreenOn(false)
+        setClockShowWhenLocked(false); setClockTurnScreenOn(false)
         super.onDestroy()
     }
 }

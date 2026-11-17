@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.localization
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.LocaleManager
 import android.content.Context
 import android.content.res.Configuration
@@ -17,7 +19,7 @@ fun restoreAppLanguage(context: Context) {
     val saved = prefs.getString(LANGUAGE_KEY, null)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         if (!prefs.getBoolean(MIGRATED_KEY, false)) {
-            val manager = context.getSystemService(LocaleManager::class.java)
+            val manager = context.clockSystemService(LocaleManager::class.java)
             if (manager.applicationLocales.isEmpty && saved != null && saved != "system") {
                 manager.applicationLocales = LocaleList.forLanguageTags(saved)
             }
@@ -36,7 +38,7 @@ fun setAppLanguage(context: Context, languageCode: String) {
         .putString(LANGUAGE_KEY, languageCode).putBoolean(MIGRATED_KEY, true).apply()
     val tags = if (languageCode == "system") "" else languageCode
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        context.getSystemService(LocaleManager::class.java).applicationLocales = LocaleList.forLanguageTags(tags)
+        context.clockSystemService(LocaleManager::class.java).applicationLocales = LocaleList.forLanguageTags(tags)
     } else {
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tags))
     }
@@ -44,7 +46,7 @@ fun setAppLanguage(context: Context, languageCode: String) {
 
 fun getCurrentLanguageTag(context: Context): String {
     val tags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        context.getSystemService(LocaleManager::class.java).applicationLocales.toLanguageTags()
+        context.clockSystemService(LocaleManager::class.java).applicationLocales.toLanguageTags()
     } else {
         AppCompatDelegate.getApplicationLocales().toLanguageTags()
     }
@@ -56,6 +58,7 @@ fun Context.withAppLanguage(): Context {
     val tag = getCurrentLanguageTag(this)
     if (tag == "system") return this
     return createConfigurationContext(Configuration(resources.configuration).apply {
-        setLocales(LocaleList.forLanguageTags(tag))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) setLocales(LocaleList.forLanguageTags(tag))
+        else setLocale(java.util.Locale.forLanguageTag(tag))
     })
 }

@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.service
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.content.BroadcastReceiver
 import android.content.Context
 import com.linzin.linzindeskclock.localization.withAppLanguage
@@ -52,12 +54,12 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
             }, finishHost = { finish() })
     }
     private fun eligibleLockContext(): Boolean = !ending &&
-        !(getSystemService(android.os.PowerManager::class.java).isInteractive && !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
+        !(clockSystemService(android.os.PowerManager::class.java).isInteractive && !clockSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
     private var registered = false
     private lateinit var exit: ClockExitController
     private val unlock = object : BroadcastReceiver() {
         override fun onReceive(context: Context,intent: Intent) {
-            if(intent.action != Intent.ACTION_USER_PRESENT || !getSystemService(android.os.PowerManager::class.java).isInteractive || getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) return
+            if(intent.action != Intent.ACTION_USER_PRESENT || !clockSystemService(android.os.PowerManager::class.java).isInteractive || clockSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) return
             ending = true; deadlineHandler.removeCallbacksAndMessages(null); scan?.cancel()
             ClockCycleStore(this@ClockDreamService).onUnlock(); finish()
         }
@@ -88,7 +90,7 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
         val cycle = ClockCycleStore(this)
         val window = cycle.activeWindow()
         val remaining = cycle.remainingWindowMs()
-        val foldable = getSystemService(SensorManager::class.java).getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) != null ||
+        val foldable = clockSystemService(SensorManager::class.java).getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) != null ||
             packageManager.hasSystemFeature("android.hardware.sensor.hinge_angle")
         if(foldable || !eligibleLockContext() || window == null || remaining <= 0) { finish(); return }
         owner?.registry?.currentState = Lifecycle.State.RESUMED
@@ -136,8 +138,8 @@ class ClockDreamService : DreamService(), PendingLockScan.Waiter {
     override fun onWakeUp() {
         if (screenOffRequested) { finish(); return }
         ending=true; deadlineHandler.removeCallbacksAndMessages(null); scan?.cancel()
-        val unlocked = getSystemService(android.os.PowerManager::class.java).isInteractive &&
-            !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+        val unlocked = clockSystemService(android.os.PowerManager::class.java).isInteractive &&
+            !clockSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
         if(unlocked) { ClockCycleStore(this).onUnlock(); finish() }
         else if(::exit.isInitialized) exit.exit() else finish()
     }

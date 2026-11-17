@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.power
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.NotificationManager
 import android.content.Context
 import android.view.Window
@@ -24,7 +26,7 @@ class ScreenOffController(
         // Persist before SCREEN_OFF can reach the monitor. Its scan must not wake this cycle.
         try {
             ClockCycleStore(context).suppress()
-            context.getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
+            context.clockSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
             prepareHost()
             @Suppress("DEPRECATION")
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or

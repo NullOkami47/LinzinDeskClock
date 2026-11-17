@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.service
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -30,13 +32,15 @@ class AutoClockService : Service() {
     private var scanWindow: ClockLockWindow? = null
     private var scanProducedOffer = false
     private var candidate = WeakReference<ClockActivationHost.Host>(null)
-    private val notifications get() = getSystemService(NotificationManager::class.java)
+    private val notifications get() = clockSystemService(NotificationManager::class.java)
     override fun onCreate() {
         super.onCreate()
         cycle = ClockCycleStore(this)
-        notifications.createNotificationChannel(NotificationChannel(MONITOR_CHANNEL,getString(R.string.auto_monitor_channel),NotificationManager.IMPORTANCE_LOW))
-        notifications.createNotificationChannel(NotificationChannel(OFFER_CHANNEL,getString(R.string.auto_offer_channel),NotificationManager.IMPORTANCE_DEFAULT))
-        val foldable = getSystemService(SensorManager::class.java).getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) != null ||
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notifications.createNotificationChannel(NotificationChannel(MONITOR_CHANNEL,getString(R.string.auto_monitor_channel),NotificationManager.IMPORTANCE_LOW))
+            notifications.createNotificationChannel(NotificationChannel(OFFER_CHANNEL,getString(R.string.auto_offer_channel),NotificationManager.IMPORTANCE_DEFAULT))
+        }
+        val foldable = clockSystemService(SensorManager::class.java).getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) != null ||
             packageManager.hasSystemFeature("android.hardware.sensor.hinge_angle")
         monitor = LockStateMonitor(this,onLock = {
             cycle.noteLock()
@@ -93,7 +97,7 @@ class AutoClockService : Service() {
             AutoClockPreferences(this).enabled = false; stopSelf(); return START_NOT_STICKY
         }
         val settings = AutoClockPreferences(this)
-        if(!settings.enabled || shouldPauseAutoClockForLowBattery(this)) {
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !settings.enabled || shouldPauseAutoClockForLowBattery(this)) {
             running = false
             settings.lastActivation = "MONITOR_STOPPED"
             stopSelf()
@@ -131,7 +135,8 @@ class AutoClockService : Service() {
     override fun onDestroy() {
         running = false
         scan.cancel(); monitor.close(); cancelOffer(); candidate.clear()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+        else @Suppress("DEPRECATION") stopForeground(true)
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null

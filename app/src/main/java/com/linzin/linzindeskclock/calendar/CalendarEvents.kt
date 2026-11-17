@@ -8,6 +8,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import androidx.core.os.ConfigurationCompat
 import com.linzin.linzindeskclock.R
 import java.time.ZoneId
 
@@ -73,7 +74,7 @@ internal fun queryUpcomingCalendarEvents(
                 val allDay = cursor.getInt(allDayIndex) == 1
                 val label = formatCalendarEventSummary(
                     begin, end, allDay, nowMillis,
-                    context.resources.configuration.locales[0], ZoneId.systemDefault(),
+                    ConfigurationCompat.getLocales(context.resources.configuration)[0] ?: java.util.Locale.getDefault(), ZoneId.systemDefault(),
                     context.getString(R.string.event_all_day_today), context.getString(R.string.event_all_day)
                 ) ?: continue
                 events += UpcomingCalendarEvent(

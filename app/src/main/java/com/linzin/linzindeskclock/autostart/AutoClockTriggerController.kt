@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.autostart
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -21,7 +23,7 @@ class AutoClockTriggerController(
     private val handler = Handler(Looper.getMainLooper())
     private val gate = ClockActivationStateMachine()
     private val settings = AutoClockPreferences(context)
-    private val wake = context.getSystemService(PowerManager::class.java)
+    private val wake = context.clockSystemService(PowerManager::class.java)
         .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"LinzinDeskClock:lock-scan").apply { setReferenceCounted(false) }
     private var running = false
     private val detector = TiltDetector(context) { tilt ->

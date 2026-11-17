@@ -117,8 +117,9 @@ fun SideDateWidget(
 
     LaunchedEffect(Unit) {
         while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000L)
+            val now = System.currentTimeMillis()
+            currentTime = now
+            delay(60_000L - (now % 60_000L))
         }
     }
 

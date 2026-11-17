@@ -4,6 +4,12 @@
 
     <string name="initial_prompt_fold">スマートフォンを半折りにして\nカバー画面でデスククロックを起動してください</string>
 
+    <!-- 縦折りスマホ案内ダイアログ -->
+    <string name="clamshell_notice_title">縦折り端末をご利用の方へ</string>
+    <string name="clamshell_notice_desc">縦折りの折りたたみスマートフォンを検出しました。\n\n多くの端末はメーカー側のシステム制限により、半折りにしてもカバー画面で時計が正常に引き継ぎ表示されない場合があります（現在、Motorola razr 40 Ultra以降の機種のみ動作確認済みです）。\n\nまずは端末を半折りにしてお試しください。もしカバー画面に表示されない場合は、画面を完全に開いて横向きにし、メイン画面でご利用いただくことを推奨します。</string>
+    <string name="clamshell_notice_btn_try">了解、試してみる</string>
+    <string name="clamshell_notice_btn_fail">カバー画面で表示できない</string>
+
     <!-- 手勢教學引導遮罩 -->
     <string name="tutorial_title">ジェスチャー操作ガイド</string>
     <string name="tutorial_single_tap_title">シングルタップ</string>
@@ -55,6 +61,9 @@
     <string name="current_location">現在地</string>
     <string name="weather_disabled_title">天気情報が無効です</string>
     <string name="weather_disabled_desc">右上の ⚙ 設定から\n「現在地の天気を有効化」をオンにし、\n位置情報の権限を許可してください</string>
+    <string name="weather_unavailable_title">天気情報を取得できません</string>
+    <string name="weather_unavailable_desc">位置情報または通信データを取得できませんでした\nここをタップして再読み込み</string>
+    <string name="weather_refreshing_title">天気情報を更新中…</string>
 
     <!-- 設定對話框：行事曆行程設定 -->
     <string name="pref_calendar_title">カレンダー予定の表示</string>
@@ -88,6 +97,8 @@
     <string name="pref_burn_in_desc">定期的にピクセルを微細にシフトしてOLED画面を保護します (デフォルト有効)</string>
     <string name="pref_flip_180_title">画面を強制 180° 反転</string>
     <string name="pref_flip_180_desc">自動回転を固定して 180° 反転し、縦折り端末のテントモード時の上下逆転を修正します</string>
+    <string name="pref_cutout_title">パンチホール領域まで全画面表示</string>
+    <string name="pref_cutout_desc">オフにするとカメラ切り欠き側に黒帯を残し、端の表示被りを防ぎます</string>
     <string name="pref_brightness_title">明るさの手動調整</string>
     <string name="pref_brightness_desc_manual">画面の明るさを手動設定</string>
     <string name="pref_brightness_desc_auto">システムの自動調整に従う</string>
@@ -127,4 +138,12 @@
     <string name="settings_btn_go_to_github_releases">GitHub Releases でダウンロード</string>
     <string name="settings_update_failed">更新を確認できませんでした。ネットワーク接続を確認してください。</string>
     <string name="settings_update_current">最新バージョン（%1$s）を使用しています。</string>
+
+    <string name="legacy_android_dialog_title">旧バージョン Android の互換性について</string>
+    <string name="legacy_android_dialog_desc">お使いの端末は Android 12 以前のため、新しいシステム API を必要とする一部機能は制限または利用できません：\n\n• 折りたたみ検知：ヒンジ角度とカバー画面の自動切替は Android 11 以降が必要です（通常画面モードで動作します）。\n• 焼き付き防止グリッド：シェーダー処理には Android 13 以降が必要です。\n• パンチホール黒帯切替：切り欠き領域の制御は Android 9.0 以降が必要です。\n• 天気の位置情報：古い端末では測位に時間がかかる場合があります。必要に応じて保存済みの座標やネットワークの概算位置を使用します。</string>
+    <string name="legacy_android_dialog_btn_ok">了解しました</string>
+
+    <string name="pref_burn_in_unsupported">Android 13 以降が必要です</string>
+    <string name="pref_cutout_unsupported">Android 9.0 以降が必要です</string>
+    <string name="auto_legacy_unsupported">ロック時の自動起動には Android 7.0 以降が必要です。時計は手動で開くことができます。</string>
 </resources>

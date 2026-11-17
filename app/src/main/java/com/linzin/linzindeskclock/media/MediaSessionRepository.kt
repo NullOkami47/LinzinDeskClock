@@ -1,5 +1,8 @@
 package com.linzin.linzindeskclock.media
 
+import androidx.core.content.ContextCompat
+
+
 import android.content.Context
 import android.database.ContentObserver
 import android.graphics.Bitmap
@@ -33,7 +36,7 @@ import kotlinx.coroutines.withContext
 @MainThread
 class MediaSessionRepository(context: Context) {
     private val app = context.applicationContext
-    private val manager = app.getSystemService(MediaSessionManager::class.java)
+    private val manager = ContextCompat.getSystemService(app, MediaSessionManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(MediaWidgetState())
     val state: StateFlow<MediaWidgetState> = mutableState.asStateFlow()
@@ -161,7 +164,9 @@ class MediaSessionRepository(context: Context) {
             block(MediaAccess.CONNECTING)
             if (!rebindRequested) {
                 rebindRequested = true
-                try { NotificationListenerService.requestRebind(MediaNotificationAccess.component(app)) } catch (_: RuntimeException) { }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    try { NotificationListenerService.requestRebind(MediaNotificationAccess.component(app)) } catch (_: RuntimeException) { }
+                }
             }
             return
         }

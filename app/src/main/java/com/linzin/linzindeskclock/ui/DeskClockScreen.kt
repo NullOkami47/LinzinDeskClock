@@ -11,6 +11,11 @@ import com.linzin.linzindeskclock.display.preferredClockOrientation
 import com.linzin.linzindeskclock.display.saveClockFlip
 import com.linzin.linzindeskclock.updates.rememberAppUpdateState
 import com.linzin.linzindeskclock.weather.fetchAndApplyWeather
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -89,14 +94,14 @@ fun DeskClockScreen(
     onScreenOff: () -> Unit = onExit
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = context.findActivity()
     val window = windowOverride ?: activity?.window
     val session = entryMode == ClockEntryMode.LOCK_SCREEN || entryMode == ClockEntryMode.DREAM
     val clockContentModifier = Modifier.fillMaxSize().padding(bottom = if(session) 12.dp else 0.dp)
     val allowSettings = !session
     val uiLockDescription = stringResource(R.string.auto_ui_lock)
     val settingsDescription = stringResource(R.string.settings_title)
-    val keyguard = remember { context.getSystemService(android.app.KeyguardManager::class.java) }
+    val keyguard = remember { context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager }
     DisposableEffect(window) {
         val oldBrightness = window?.attributes?.screenBrightness
         val oldKeepScreen = (window?.attributes?.flags ?: 0) and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
@@ -113,6 +118,8 @@ fun DeskClockScreen(
     val prefs = remember { context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE) }
 
     var flipScreen180 by remember { mutableStateOf(prefs.getBoolean("pref_flip_screen_180", false)) }
+    var extendCutout by remember { mutableStateOf(prefs.getBoolean("pref_extend_cutout", true)) }
+    LaunchedEffect(extendCutout, window) { applyDisplayCutoutMode(window, extendCutout) }
     val appUpdate = rememberAppUpdateState(allowSettings)
     LaunchedEffect(flipScreen180, activity, window, hasHingeSensor) {
         val orientation = preferredClockOrientation(context, hasHingeSensor)
@@ -159,6 +166,8 @@ fun DeskClockScreen(
     var weatherEnabled by remember { mutableStateOf(prefs.getBoolean("pref_weather_enabled", false)) }
     var isFahrenheit by remember { mutableStateOf(prefs.getBoolean("pref_is_fahrenheit", false)) }
     var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
+    var locationTrigger by remember { mutableIntStateOf(0) }
+    var isWeatherRefreshing by remember { mutableStateOf(false) }
 
     var showCalendarEvents by remember {
         mutableStateOf(prefs.getBoolean("pref_show_calendar_events", false))
@@ -254,17 +263,24 @@ fun DeskClockScreen(
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         weatherEnabled = granted
+        if (granted) locationTrigger++
     } else null
 
     // Recheck permission on every resume; cancel active location work while the host is stopped.
-    LaunchedEffect(weatherEnabled, layoutMode, lifecycle, currentLocationStr) {
+    LaunchedEffect(weatherEnabled, layoutMode, lifecycle, currentLocationStr, locationTrigger) {
         if (weatherEnabled && layoutMode != ClockLayoutMode.SINGLE) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
                     val granted = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
                         .any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
-                    if (granted) fetchAndApplyWeather(context, currentLocationStr) { weatherInfo = it }
-                    else weatherInfo = null
+                    if (granted) {
+                        isWeatherRefreshing = true
+                        try {
+                            fetchAndApplyWeather(context, currentLocationStr) { weatherInfo = it }
+                        } finally {
+                            isWeatherRefreshing = false
+                        }
+                    } else weatherInfo = null
                     delay(30 * 60 * 1000L)
                 }
             }
@@ -349,6 +365,7 @@ fun DeskClockScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .then(if (!extendCutout) Modifier.windowInsetsPadding(WindowInsets.displayCutout) else Modifier)
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -362,6 +379,17 @@ fun DeskClockScreen(
             }
             .checkerboardBurnInProtection(isIdle = isBurnInProtectionActive && burnInProtectionEnabled)
     ) {
+        val density = LocalDensity.current
+        val layoutDirection = LocalLayoutDirection.current
+        val cutoutInsets = WindowInsets.displayCutout
+        val hasLeftCutout = !extendCutout && cutoutInsets.getLeft(density, layoutDirection) > 0
+        val hasRightCutout = !extendCutout && cutoutInsets.getRight(density, layoutDirection) > 0
+        val singleShape = RoundedCornerShape(
+            topStart = if (hasLeftCutout) 24.dp else 0.dp,
+            bottomStart = if (hasLeftCutout) 24.dp else 0.dp,
+            topEnd = if (hasRightCutout) 24.dp else 0.dp,
+            bottomEnd = if (hasRightCutout) 24.dp else 0.dp
+        )
         when (layoutMode) {
             ClockLayoutMode.SINGLE -> {
                 MainClockSection(
@@ -373,7 +401,7 @@ fun DeskClockScreen(
                     showBattery = showBattery,
                     batteryState = batteryState,
                     isUiLocked = isUiLocked,
-                    modifier = clockContentModifier
+                    modifier = clockContentModifier.clip(singleShape)
                 )
             }
             ClockLayoutMode.DUAL_LEFT_LARGE, ClockLayoutMode.DUAL_RIGHT_LARGE -> {
@@ -400,6 +428,7 @@ fun DeskClockScreen(
                         Box(Modifier.fillMaxSize().padding(horizontal=4.dp).clip(RoundedCornerShape(24.dp)).testTag("widget_panel")) {
                             SideWidgetPager(
                                 state = sidePagerState, weatherEnabled = weatherEnabled, weatherInfo = weatherInfo,
+                                isWeatherRefreshing = isWeatherRefreshing, onRefreshWeather = { locationTrigger++ },
                                 isFahrenheit = isFahrenheit, is24Hour = is24Hour, isUiLocked = isUiLocked,
                                 calendarEvents = if (session) emptyList() else calendarEventsList,
                                 isLocked = session || keyguard.isKeyguardLocked,
@@ -453,9 +482,8 @@ fun DeskClockScreen(
                     modifier = Modifier.size(46.dp).testTag("clock_settings").semantics { contentDescription = settingsDescription }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "⚙",
-                            fontSize = 24.sp,
+                        MaterialSettingsIcon(
+                            modifier = Modifier.size(22.dp),
                             color = if (isUiLocked) Color(0xFF75757F) else Color.White
                         )
                     }
@@ -476,8 +504,13 @@ fun DeskClockScreen(
                 hasHingeSensor = hasHingeSensor,
                 flipScreen180 = flipScreen180,
                 onFlipScreen180Change = { enabled ->
-                    saveClockFlip(context, enabled, activity?.display?.rotation ?: android.view.Surface.ROTATION_270)
+                    saveClockFlip(context, enabled, activity?.windowManager?.defaultDisplay?.rotation ?: android.view.Surface.ROTATION_270)
                     flipScreen180 = enabled
+                },
+                extendCutout = extendCutout,
+                onExtendCutoutChange = { enabled ->
+                    extendCutout = enabled
+                    prefs.edit().putBoolean("pref_extend_cutout", enabled).apply()
                 },
                 updateInfo = appUpdate.info,
                 isCheckingUpdate = appUpdate.checking,

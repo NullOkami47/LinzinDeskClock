@@ -4,6 +4,12 @@
 
     <string name="initial_prompt_fold">请将手机半折\n以在外屏幕启用桌面时钟</string>
 
+    <!-- 小折叠提示对话框 -->
+    <string name="clamshell_notice_title">上下小折叠使用提示</string>
+    <string name="clamshell_notice_desc">检测到您当前使用的是上下翻折的小折叠屏手机。\n\n目前多数品牌受限于原厂系统限制，半折后可能无法在外屏顺利接续显示时钟（目前实测仅 Motorola razr 40 Ultra 及更新的机型支持外屏正常接续）。\n\n您可以先尝试将手机半折看看；若外屏无法正常显示，建议您完全展开手机，并以横向放置方式使用内屏时钟。</string>
+    <string name="clamshell_notice_btn_try">我知道了，我试试看</string>
+    <string name="clamshell_notice_btn_fail">外屏无法正常显示</string>
+
     <!-- 手势教学引导遮罩 -->
     <string name="tutorial_title">手势操作指南</string>
     <string name="tutorial_single_tap_title">单指轻触</string>
@@ -55,6 +61,9 @@
     <string name="current_location">当前位置</string>
     <string name="weather_disabled_title">尚未启用天气信息</string>
     <string name="weather_disabled_desc">请点击右上角 ⚙ 设置\n开启“启用当地天气信息”\n并授予位置权限即可显示</string>
+    <string name="weather_unavailable_title">尚未获取天气信息</string>
+    <string name="weather_unavailable_desc">目前无法获取定位或网络数据\n点击此处手动刷新</string>
+    <string name="weather_refreshing_title">正在更新天气信息…</string>
 
     <!-- 设置对话框：日历行程设置 -->
     <string name="pref_calendar_title">显示日历近期行程</string>
@@ -88,6 +97,8 @@
     <string name="pref_burn_in_desc">定时微幅抖动画面像素以保护 OLED 屏幕 (默认开启)</string>
     <string name="pref_flip_180_title">强制画面 180° 翻转</string>
     <string name="pref_flip_180_desc">锁定屏幕旋转并翻转 180°，修正小折叠屏外屏或帐篷模式画面倒置问题</string>
+    <string name="pref_cutout_title">全屏延伸至挖孔区域</string>
+    <string name="pref_cutout_desc">关闭后将在镜头挖孔侧保留黑边，避免遮挡角落信息</string>
     <string name="pref_brightness_title">手动调整亮度</string>
     <string name="pref_brightness_desc_manual">自定义窗口亮度</string>
     <string name="pref_brightness_desc_auto">跟随系统自动设置</string>
@@ -128,4 +139,12 @@
 
     <string name="settings_update_failed">检查更新失败，请确认网络连接。</string>
     <string name="settings_update_current">目前已是最新版本（%1$s）。</string>
+    <string name="legacy_android_dialog_title">旧版 Android 系统兼容性提示</string>
+    <string name="legacy_android_dialog_desc">检测到您的设备系统为 Android 12 或更早版本，部分依赖新系统 API 的功能将受限或无法运行：\n\n• 折叠屏感应：Android 10 以下不支持铰链角度与自动外屏切换，将以普通屏幕模式运行。\n• 防烧屏交错保护：像素级着色器（Shader）仅支持 Android 13 以上系统。\n• 挖孔黑边切换：刘海与挖孔边界控制仅支持 Android 9.0 以上系统。\n• 当地天气定位：旧版系统定位可能较慢；必要时会使用已保存坐标或网络大致位置。</string>
+    <string name="legacy_android_dialog_btn_ok">我知道了</string>
+
+    <string name="pref_burn_in_unsupported">需 Android 13 以上系统方可支持</string>
+    <string name="pref_cutout_unsupported">需 Android 9.0 以上系统方可支持</string>
+
+    <string name="auto_legacy_unsupported">锁定自动启动需 Android 7.0 以上；您仍可手动打开时钟。</string>
 </resources>

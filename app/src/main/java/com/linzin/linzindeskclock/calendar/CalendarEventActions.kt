@@ -1,5 +1,9 @@
 package com.linzin.linzindeskclock.calendar
 
+import androidx.core.content.ContextCompat
+
+import com.linzin.linzindeskclock.compat.isClockDeviceLocked
+
 import android.app.KeyguardManager
 import android.content.ActivityNotFoundException
 import android.content.ContentUris
@@ -11,8 +15,8 @@ import com.linzin.linzindeskclock.R
 
 /** Read the real device state at each user action; never request a keyguard dismissal. */
 fun isCalendarDeviceUnlocked(context: Context): Boolean {
-    val keyguard = context.getSystemService(KeyguardManager::class.java) ?: return false
-    return !keyguard.isKeyguardLocked && !keyguard.isDeviceLocked
+    val keyguard = ContextCompat.getSystemService(context, KeyguardManager::class.java) ?: return false
+    return !keyguard.isKeyguardLocked && !keyguard.isClockDeviceLocked()
 }
 
 fun canShowCalendarEventDetails(context: Context): Boolean =

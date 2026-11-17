@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.os.ConfigurationCompat
 import com.linzin.linzindeskclock.R
 import com.linzin.linzindeskclock.calendar.UpcomingCalendarEvent
 import com.linzin.linzindeskclock.calendar.buildCalendarEventViewIntent
@@ -38,7 +39,7 @@ fun CalendarEventDetailsDialog(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    val locale = configuration.locales[0] ?: Locale.ROOT
+    val locale = ConfigurationCompat.getLocales(configuration)[0] ?: Locale.ROOT
     val dateTimes = formatCalendarEventDateTimes(
         event, locale = locale, use24Hour = DateFormat.is24HourFormat(context)
     )

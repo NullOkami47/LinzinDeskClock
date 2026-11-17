@@ -1,11 +1,17 @@
 package com.linzin.linzindeskclock.media
 
+import androidx.core.content.ContextCompat
+
+import com.linzin.linzindeskclock.compat.clockSystemService
+import com.linzin.linzindeskclock.compat.isClockDeviceLocked
+
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 
 object MediaNotificationAccess {
@@ -13,18 +19,26 @@ object MediaNotificationAccess {
 
     /** Check this exact service, not merely another listener in the same package. */
     fun isGranted(context: Context): Boolean = try {
-        context.getSystemService(NotificationManager::class.java)
-            ?.isNotificationListenerAccessGranted(component(context)) == true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            context.clockSystemService(NotificationManager::class.java)
+                .isNotificationListenerAccessGranted(component(context))
+        } else {
+            val exactComponent = component(context)
+            Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+                .orEmpty().split(':').any { ComponentName.unflattenFromString(it) == exactComponent }
+        }
     } catch (_: RuntimeException) { false }
 
     /** Shared by settings and the media permission action; recheck keyguard at click time. */
     fun openSettings(context: Context): Boolean {
-        val keyguard = context.getSystemService(KeyguardManager::class.java)
-        if (keyguard == null || keyguard.isDeviceLocked || keyguard.isKeyguardLocked) return false
-        val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
-            .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component(context).flattenToString())
+        val keyguard = ContextCompat.getSystemService(context, KeyguardManager::class.java)
+        if (keyguard == null || keyguard.isClockDeviceLocked() || keyguard.isKeyguardLocked) return false
         val fallback = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-        for (intent in listOf(detail, fallback)) {
+        val intents = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            listOf(Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component(context).flattenToString()), fallback)
+        } else listOf(fallback)
+        for (intent in intents) {
             try {
                 context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 return true

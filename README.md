@@ -43,7 +43,7 @@
 
 - **支援機種**：近代具備轉軸感應器之大摺疊機皆可順利觸發進入桌面時鐘模式。
 - **小摺疊（Flip）與直立機**：進入 APP 點擊「不是大摺疊機？」按鈕，可手動放行體驗橫向全螢幕時鐘（可能需要你付出一些代價）。
-- **系統需求**：支援 Android 12（含）以上版本。
+- **系統需求**：支援 Android 5.0（含）以上版本；鎖定自動啟動需 Android 7.0 以上，挖孔留邊設定需 Android 9.0 以上，像素防烙印需 Android 13 以上。
 
 ---
 
@@ -66,7 +66,7 @@
 
 - **支持机型**：近代具备转轴传感器的大折叠手机均可顺利触发进入桌面时钟模式。
 - **小折叠（Flip）与直板机**：进入 APP 点击“不是大折叠机？”按钮，可手动放行体验横屏桌面时钟（可能需要你付出一点代价）。
-- **系统要求**：支持 Android 12（含）以上版本。
+- **系统要求**：支持 Android 5.0（含）以上版本；锁定自动启动需 Android 7.0 以上，挖孔留边设置需 Android 9.0 以上，像素防烧屏需 Android 13 以上。
 
 ---
 
@@ -89,7 +89,7 @@
 
 - **Supported Devices**: Most modern large foldable phones equipped with a hinge sensor.
 - **Flips & Slab Phones**: Tap the "Not a Foldable?" button on the initial screen to bypass and enjoy the full-screen desk clock.
-- **OS Requirement**: Android 12 and above.
+- **OS Requirement**: Android 5.0 and above. Automatic entry on lock requires Android 7.0+, the camera cutout setting requires Android 9.0+, and pixel burn-in protection requires Android 13+.
 
 ---
 

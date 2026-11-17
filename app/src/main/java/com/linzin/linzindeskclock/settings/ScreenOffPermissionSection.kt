@@ -1,5 +1,9 @@
 package com.linzin.linzindeskclock.settings
 
+import androidx.core.content.ContextCompat
+
+import com.linzin.linzindeskclock.compat.isClockDeviceLocked
+
 import android.app.KeyguardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -113,12 +117,12 @@ fun ScreenOffPermissionSection(timeoutMillis: Long) {
                 onClick = {
                     if (!requestInProgress) {
                         refreshPermission()
-                        val keyguard = context.getSystemService(KeyguardManager::class.java)
+                        val keyguard = ContextCompat.getSystemService(context, KeyguardManager::class.java)
                         when {
                             granted -> Unit
                             !supported -> permissionError = R.string.screen_off_permission_unsupported
                             keyguard == null -> permissionError = R.string.screen_off_permission_failed
-                            keyguard.isKeyguardLocked || keyguard.isDeviceLocked ->
+                            keyguard.isKeyguardLocked || keyguard.isClockDeviceLocked() ->
                                 permissionError = R.string.screen_off_permission_locked
                             else -> {
                                 permissionError = null

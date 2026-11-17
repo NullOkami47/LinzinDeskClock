@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.autostart
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -13,9 +15,9 @@ import android.view.Display
 import androidx.core.content.ContextCompat
 
 class LockStateMonitor(private val context: Context,private val onLock:()->Unit,private val onUnlock:()->Unit,private val onScreenOn:()->Unit) {
-    private val power=context.getSystemService(PowerManager::class.java)
-    private val keyguard=context.getSystemService(KeyguardManager::class.java)
-    private val displays=context.getSystemService(DisplayManager::class.java)
+    private val power=context.clockSystemService(PowerManager::class.java)
+    private val keyguard=context.clockSystemService(KeyguardManager::class.java)
+    private val displays=context.clockSystemService(DisplayManager::class.java)
     val nonInteractive:Boolean get()=!power.isInteractive
     val locked:Boolean get()=keyguard.isKeyguardLocked
     val activelyUnlocked:Boolean get()=power.isInteractive && !keyguard.isKeyguardLocked

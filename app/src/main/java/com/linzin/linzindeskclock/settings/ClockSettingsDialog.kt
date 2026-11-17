@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +30,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +44,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -79,6 +84,8 @@ fun ClockSettingsDialog(
     onBurnInProtectionChange: (Boolean) -> Unit,
     flipScreen180: Boolean = false,
     onFlipScreen180Change: (Boolean) -> Unit = {},
+    extendCutout: Boolean = true,
+    onExtendCutoutChange: (Boolean) -> Unit = {},
     updateInfo: AppUpdateInfo? = null,
     isCheckingUpdate: Boolean = false,
     onCheckUpdateClick: () -> Unit = {},
@@ -86,6 +93,10 @@ fun ClockSettingsDialog(
     onDismiss: () -> Unit
 ) {
     var showSuggestDualDialog by remember { mutableStateOf(false) }
+    val initialFocusRequester = remember { FocusRequester() }
+    val isHingeSupported = hasHingeSensor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    val isBurnInSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val isCutoutSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
 
     val handleWeatherToggle: (Boolean) -> Unit = { targetState ->
         onWeatherEnabledChange(targetState)
@@ -105,6 +116,9 @@ fun ClockSettingsDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        // Older Android windows can initially focus a slider far below the visible viewport.
+        // Start at the heading once, then leave keyboard focus and scrolling under user control.
+        LaunchedEffect(Unit) { initialFocusRequester.requestFocus() }
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.85f)
@@ -125,7 +139,10 @@ fun ClockSettingsDialog(
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        modifier = Modifier
+                            .focusRequester(initialFocusRequester)
+                            .focusable()
+                            .padding(vertical = 4.dp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -433,7 +450,7 @@ fun ClockSettingsDialog(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .then(
-                                if (hasHingeSensor) {
+                                if (isHingeSupported) {
                                     Modifier.clickable { onShowHingeAngleChange(!showHingeAngle) }
                                 } else Modifier
                             )
@@ -446,22 +463,22 @@ fun ClockSettingsDialog(
                                 text = stringResource(R.string.pref_hinge_title),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (hasHingeSensor) Color.White else Color(0xFF6E6E78)
+                                color = if (isHingeSupported) Color.White else Color(0xFF6E6E78)
                             )
                             Text(
-                                text = if (hasHingeSensor) {
+                                text = if (isHingeSupported) {
                                     stringResource(R.string.pref_hinge_desc)
                                 } else {
                                     stringResource(R.string.pref_hinge_unsupported)
                                 },
                                 fontSize = 13.sp,
-                                color = if (hasHingeSensor) Color.Gray else Color(0xFFE57373)
+                                color = if (isHingeSupported) Color.Gray else Color(0xFFE57373)
                             )
                         }
                         Switch(
-                            checked = if (hasHingeSensor) showHingeAngle else false,
+                            checked = if (isHingeSupported) showHingeAngle else false,
                             onCheckedChange = null,
-                            enabled = hasHingeSensor
+                            enabled = isHingeSupported
                         )
                     }
 
@@ -472,7 +489,7 @@ fun ClockSettingsDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { onBurnInProtectionChange(!burnInProtectionEnabled) }
+                            .clickable(enabled = isBurnInSupported) { onBurnInProtectionChange(!burnInProtectionEnabled) }
                             .padding(vertical = 12.dp, horizontal = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -482,16 +499,17 @@ fun ClockSettingsDialog(
                                 text = stringResource(R.string.pref_burn_in_title),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                color = if (isBurnInSupported) Color.White else Color(0xFF6E6E78)
                             )
                             Text(
-                                text = stringResource(R.string.pref_burn_in_desc),
+                                text = stringResource(if (isBurnInSupported) R.string.pref_burn_in_desc else R.string.pref_burn_in_unsupported),
                                 fontSize = 13.sp,
-                                color = Color.Gray
+                                color = if (isBurnInSupported) Color.Gray else Color(0xFFE57373)
                             )
                         }
                         Switch(
-                            checked = burnInProtectionEnabled,
+                            checked = isBurnInSupported && burnInProtectionEnabled,
+                            enabled = isBurnInSupported,
                             onCheckedChange = null
                         )
                     }
@@ -528,6 +546,45 @@ fun ClockSettingsDialog(
                     }
 
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF33333A)))
+
+                    // 全螢幕延伸至挖孔區域開關
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("cutout_setting")
+                            .clip(RoundedCornerShape(8.dp))
+                            .then(
+                                if (isCutoutSupported) {
+                                    Modifier.clickable { onExtendCutoutChange(!extendCutout) }
+                                } else Modifier
+                            )
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.pref_cutout_title),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isCutoutSupported) Color.White else Color(0xFF6E6E78)
+                            )
+                            Text(
+                                text = if (isCutoutSupported) {
+                                    stringResource(R.string.pref_cutout_desc)
+                                } else {
+                                    stringResource(R.string.pref_cutout_unsupported)
+                                },
+                                fontSize = 13.sp,
+                                color = if (isCutoutSupported) Color.Gray else Color(0xFFE57373)
+                            )
+                        }
+                        Switch(
+                            checked = if (isCutoutSupported) extendCutout else false,
+                            onCheckedChange = null,
+                            enabled = isCutoutSupported
+                        )
+                    }
 
                     // 7. 螢幕亮度手動控制
                     Row(

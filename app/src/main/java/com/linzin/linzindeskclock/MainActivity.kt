@@ -5,6 +5,14 @@ import com.linzin.linzindeskclock.settings.AutoClockSetupDialog
 import com.linzin.linzindeskclock.calendar.UpcomingCalendarEvent
 import com.linzin.linzindeskclock.ui.SideDateWidget
 import android.Manifest
+import android.content.ContextWrapper
+import androidx.core.os.ConfigurationCompat
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
+import com.linzin.linzindeskclock.compat.setClockShowWhenLocked
+import com.linzin.linzindeskclock.compat.setClockTurnScreenOn
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.os.PowerManager
@@ -252,33 +260,7 @@ fun Modifier.checkerboardBurnInProtection(isIdle: Boolean): Modifier = composed 
         return@composed this
     }
 
-    val shader = remember {
-        RuntimeShader(
-            """
-            uniform shader composable;
-            uniform float phase;
-
-            half4 main(float2 fragCoord) {
-                float check = mod(floor(fragCoord.x) + floor(fragCoord.y) + phase, 2.0);
-                if (check < 1.0) {
-                    return composable.eval(fragCoord);
-                }
-                return half4(0.0, 0.0, 0.0, 1.0);
-            }
-            """.trimIndent()
-        )
-    }
-
-    graphicsLayer {
-        try {
-            shader.setFloatUniform("phase", phase.toFloat())
-            renderEffect = RenderEffect
-                .createRuntimeShaderEffect(shader, "composable")
-                .asComposeRenderEffect()
-        } catch (e: Throwable) {
-            renderEffect = null
-        }
-    }
+    this.applyTiramisuBurnInShader(phase)
 }
 
 // ==========================================
@@ -331,7 +313,7 @@ fun rememberBatteryState(): BatteryState {
 fun SystemBarsController(hideSystemBars: Boolean) {
     val view = LocalView.current
     if (!view.isInEditMode) {
-        val window = (view.context as? Activity)?.window ?: return
+        val window = view.context.findActivity()?.window ?: return
         DisposableEffect(hideSystemBars) {
             val controller = WindowCompat.getInsetsController(window, view)
             WindowCompat.setDecorFitsSystemWindows(window, !hideSystemBars)
@@ -1419,7 +1401,7 @@ fun NonFoldableDialog(
                     onClick = {
                         val randomToast = rejectToasts[Random.nextInt(rejectToasts.size)]
                         Toast.makeText(context, randomToast, Toast.LENGTH_SHORT).show()
-                        (context as? Activity)?.finishAffinity()
+                        context.findActivity()?.finishAffinity()
                     },
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFF2C2C34),
@@ -1481,16 +1463,19 @@ fun NonFoldableDialog(
 fun InitialScreen(
     hasHingeSensor: Boolean = true,
     isClamshell: Boolean = false,
+    shouldPromptClamshell: Boolean = false,
     onEnterClockDirectly: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
+    val prefs = remember { context.getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE) }
+
     val versionName = remember(context) {
         try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.1"
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
         } catch (e: Exception) {
-            "1.0.1"
+            "1.0"
         }
     }
 
@@ -1498,6 +1483,17 @@ fun InitialScreen(
     var showNonFoldableDialog by remember { mutableStateOf(false) }
     var showAutoSetup by remember { mutableStateOf(false) }
     if(showAutoSetup) AutoClockSetupDialog(hasHingeSensor=hasHingeSensor,onDismiss={ showAutoSetup=false })
+
+    var showClamshellNoticeDialog by remember {
+        val hasDismissedBefore = prefs.getBoolean("pref_dismiss_clamshell_notice", false)
+        mutableStateOf(shouldPromptClamshell && !hasDismissedBefore)
+    }
+
+    LaunchedEffect(shouldPromptClamshell) {
+        if (shouldPromptClamshell && !prefs.getBoolean("pref_dismiss_clamshell_notice", false)) {
+            showClamshellNoticeDialog = true
+        }
+    }
 
     val toastLiarFoldableText = stringResource(R.string.toast_liar_foldable)
 
@@ -1511,9 +1507,16 @@ fun InitialScreen(
 
     val appIconBitmap = remember(context) {
         val drawable = context.packageManager.getApplicationIcon(context.packageName)
+        val maxSide = 192
+        val rawW = drawable.intrinsicWidth.coerceAtLeast(1)
+        val rawH = drawable.intrinsicHeight.coerceAtLeast(1)
+        val scale = minOf(1f, maxSide.toFloat() / maxOf(rawW, rawH))
+        val targetW = (rawW * scale).roundToInt().coerceAtLeast(1)
+        val targetH = (rawH * scale).roundToInt().coerceAtLeast(1)
+
         val bitmap = android.graphics.Bitmap.createBitmap(
-            drawable.intrinsicWidth.coerceAtLeast(1),
-            drawable.intrinsicHeight.coerceAtLeast(1),
+            targetW,
+            targetH,
             android.graphics.Bitmap.Config.ARGB_8888
         )
         val canvas = android.graphics.Canvas(bitmap)
@@ -1544,35 +1547,41 @@ fun InitialScreen(
             ) { Text(stringResource(R.string.auto_setup)) }
 
             if (isLandscape) {
-                // 橫向佈局
+                // 橫向佈局：左右欄位固定比例分配，避免長文字把右側擠扁
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     Column(
+                        modifier = Modifier
+                            .weight(1.15f)
+                            .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
                         Image(
                             bitmap = appIconBitmap,
                             contentDescription = "App Icon",
-                            modifier = Modifier.size(88.dp)
+                            modifier = Modifier.size(80.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
                             text = stringResource(R.string.initial_prompt_fold),
                             color = Color.White,
-                            fontSize = 17.sp,
-                            lineHeight = 24.sp,
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center
                         )
                     }
 
                     Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -1580,13 +1589,15 @@ fun InitialScreen(
                             onClick = onNotFoldableClick,
                             shape = RoundedCornerShape(14.dp),
                             color = Color(0xFF24242B),
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            modifier = Modifier.padding(bottom = 8.dp)
                         ) {
                             Text(
                                 text = stringResource(R.string.btn_not_foldable),
                                 color = Color(0xFF81C7D4),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }
@@ -1735,6 +1746,20 @@ fun InitialScreen(
                     }
                 )
             }
+
+            if (showClamshellNoticeDialog) {
+                ClamshellNoticeDialog(
+                    onDismiss = {
+                        showClamshellNoticeDialog = false
+                        prefs.edit().putBoolean("pref_dismiss_clamshell_notice", true).apply()
+                    },
+                    onFallbackToNonFoldable = {
+                        showClamshellNoticeDialog = false
+                        prefs.edit().putBoolean("pref_dismiss_clamshell_notice", true).apply()
+                        showNonFoldableDialog = true
+                    }
+                )
+            }
         }
     }
 }
@@ -1823,6 +1848,8 @@ fun SideWidgetPager(
     state: PagerState,
     weatherEnabled: Boolean,
     weatherInfo: WeatherInfo?,
+    isWeatherRefreshing: Boolean = false,
+    onRefreshWeather: () -> Unit = {},
     isFahrenheit: Boolean,
     is24Hour: Boolean = false,
     isUiLocked: Boolean,
@@ -1841,6 +1868,12 @@ fun SideWidgetPager(
             1 -> SideWeatherWidget(
                 weatherEnabled = weatherEnabled,
                 weatherInfo = weatherInfo,
+                isRefreshing = isWeatherRefreshing,
+                onRefresh = {
+                    if (!isUiLocked && !isWeatherRefreshing) {
+                        onRefreshWeather()
+                    }
+                },
                 isFahrenheit = isFahrenheit,
                 is24Hour = is24Hour
             )
@@ -1856,6 +1889,8 @@ fun SideWidgetPager(
 fun SideWeatherWidget(
     weatherEnabled: Boolean,
     weatherInfo: WeatherInfo?,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
     isFahrenheit: Boolean,
     is24Hour: Boolean = false,
     modifier: Modifier = Modifier
@@ -1866,7 +1901,8 @@ fun SideWeatherWidget(
             .background(Color.Black)
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        if (!weatherEnabled || weatherInfo == null) {
+        if (!weatherEnabled) {
+            // 狀態 1：使用者尚未開啟天氣開關
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1892,7 +1928,46 @@ fun SideWeatherWidget(
                     textAlign = TextAlign.Center
                 )
             }
+        } else if (weatherInfo == null) {
+            // 狀態 2：已開啟天氣開關，但因網路或定位尚未擷取到資料（點擊可手動重整）
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(enabled = !isRefreshing) { onRefresh() }
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = if (isRefreshing) "⏳" else "🔄",
+                    fontSize = 34.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = if (isRefreshing) {
+                        stringResource(R.string.weather_refreshing_title)
+                    } else {
+                        stringResource(R.string.weather_unavailable_title)
+                    },
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+                if (!isRefreshing) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.weather_unavailable_desc),
+                        color = Color(0xFF81C7D4),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         } else {
+            // 狀態 3：正常顯示天氣資料（保持原有內容不變）
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1979,7 +2054,7 @@ fun SideWeatherWidget(
                                 modifier = Modifier.size(26.dp)
                             )
 
-                            val hourLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+                            val hourLocale = ConfigurationCompat.getLocales(androidx.compose.ui.platform.LocalConfiguration.current)[0] ?: Locale.getDefault()
                             val timeLabel = remember(hourly.hourOfDay, is24Hour, hourLocale) {
                                 formatForecastHour(hourly.hourOfDay, is24Hour, hourLocale)
                             }
@@ -2101,10 +2176,13 @@ fun DigitalClockFace(
         mutableStateOf(prefs.getBoolean("pref_digital_show_sec", false))
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(showSeconds) {
         while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000L)
+            val now = System.currentTimeMillis()
+            currentTime = now
+            val step = if (showSeconds) 1000L else 60_000L
+            val delayMillis = step - (now % step)
+            delay(delayMillis)
         }
     }
 
@@ -2115,7 +2193,7 @@ fun DigitalClockFace(
             !is24Hour && showSeconds -> "hh:mm:ss"
             else -> "hh:mm"
         }
-        SimpleDateFormat(pattern, Locale.US).format(Date(currentTime))
+        getCachedDateFormat(pattern, Locale.US).format(Date(currentTime))
     }
 
     val isAM = remember(currentTime) {
@@ -2123,16 +2201,17 @@ fun DigitalClockFace(
         cal.get(Calendar.AM_PM) == Calendar.AM
     }
 
-    val dateLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val dateLocale = ConfigurationCompat.getLocales(androidx.compose.ui.platform.LocalConfiguration.current)[0] ?: Locale.getDefault()
     val dateString = remember(currentTime, dateLocale) { formatClockDate(currentTime, dateLocale) }
 
     // 顯示秒數時稍微縮減水平邊距，給予字串更多排版寬度
-    val horizontalPad = if (showSeconds) 32.dp else 40.dp
+    val horizontalPad = 22.dp
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .windowInsetsPadding(WindowInsets.displayCutout)
             .padding(horizontal = horizontalPad, vertical = 20.dp)
             .pointerInput(availableStyles, isUiLocked) {
                 awaitPointerEventScope {
@@ -2191,18 +2270,17 @@ fun DigitalClockFace(
                 }
             }
     ) {
-        val heightBasedSize = maxHeight * 0.70f
+        val heightBasedSize = maxHeight * 0.74f
 
-        // 縮放係數微調：使字元等比收窄至安全區
+        val isWideFont = (currentStyle == "rafm")
         val widthDivider = when {
-            showSeconds && is24Hour -> 6.45f
-            showSeconds && !is24Hour -> 7.50f
-            !showSeconds && is24Hour -> 4.25f
-            else -> 4.95f
+            showSeconds && is24Hour -> if (isWideFont) 6.35f else 5.90f
+            showSeconds && !is24Hour -> if (isWideFont) 7.45f else 6.85f
+            !showSeconds && is24Hour -> if (isWideFont) 4.15f else 3.85f
+            else -> if (isWideFont) 4.85f else 4.50f
         }
 
-        // 預留額外 16.dp 安全緩衝，確保左右兩端不貼邊
-        val availableWidth = (maxWidth - 16.dp).coerceAtLeast(0.dp)
+        val availableWidth = (maxWidth - 12.dp).coerceAtLeast(0.dp)
         val calculatedHeight = availableWidth / widthDivider
         val finalDigitHeight = min(heightBasedSize, calculatedHeight)
 
@@ -2278,7 +2356,7 @@ fun DigitalClockFace(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(bottom = 8.dp)
+                    .padding(start = 10.dp, bottom = 8.dp)
             )
         }
 
@@ -2290,7 +2368,7 @@ fun DigitalClockFace(
                 fontWeight = FontWeight.Normal,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 8.dp)
+                    .padding(end = 10.dp, bottom = 8.dp)
             )
         }
     }
@@ -2317,25 +2395,42 @@ fun AnalogClockFace(
         mutableStateOf(prefs.getBoolean("pref_analog_show_sec", true))
     }
 
-    val painterAbw12 = painterResource(id = R.drawable.abw_12)
-    val painterAbw6 = painterResource(id = R.drawable.abw_6)
-    val painterAbw3 = painterResource(id = R.drawable.abw_3)
-    val painterAbw9 = painterResource(id = R.drawable.abw_9)
+// 👉 1. 僅載入當前選中錶盤的 4 張數字圖，節省 2/3 向量快取記憶體
+    val (res12, res6, res3, res9) = remember(analogStyleIndex) {
+        when (analogStyleIndex) {
+            0 -> listOf(R.drawable.abw_12, R.drawable.abw_6, R.drawable.abw_3, R.drawable.abw_9)
+            1 -> listOf(R.drawable.oet_12, R.drawable.oet_6, R.drawable.oet_3, R.drawable.oet_9)
+            else -> listOf(R.drawable.zmg_12, R.drawable.zmg_6, R.drawable.zmg_3, R.drawable.zmg_9)
+        }
+    }
+    val painter12 = painterResource(id = res12)
+    val painter6 = painterResource(id = res6)
+    val painter3 = painterResource(id = res3)
+    val painter9 = painterResource(id = res9)
 
-    val painterOet12 = painterResource(id = R.drawable.oet_12)
-    val painterOet6 = painterResource(id = R.drawable.oet_6)
-    val painterOet3 = painterResource(id = R.drawable.oet_3)
-    val painterOet9 = painterResource(id = R.drawable.oet_9)
+    // 👉 2. 預先計算第 3 款錶盤（Squircle 超橢圓）60 個刻度單位方向向量，避免每次重繪重複執行 180 次 Math.pow
+    val squircleUnitPoints = remember {
+        val exp = 3.6
+        List(60) { i ->
+            val rad = (i * 6f - 90f) * (PI / 180.0)
+            val cosA = cos(rad)
+            val sinA = sin(rad)
+            val denom = Math.pow(
+                Math.pow(Math.abs(cosA), exp) + Math.pow(Math.abs(sinA), exp),
+                1.0 / exp
+            )
+            val factor = if (denom > 0.001) (1.0 / denom).toFloat() else 1f
+            Offset((cosA * factor).toFloat(), (sinA * factor).toFloat())
+        }
+    }
 
-    val painterZmg12 = painterResource(id = R.drawable.zmg_12)
-    val painterZmg6 = painterResource(id = R.drawable.zmg_6)
-    val painterZmg3 = painterResource(id = R.drawable.zmg_3)
-    val painterZmg9 = painterResource(id = R.drawable.zmg_9)
-
-    LaunchedEffect(Unit) {
+    LaunchedEffect(showSeconds) {
         while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000L)
+            val now = System.currentTimeMillis()
+            currentTime = now
+            val step = if (showSeconds) 1000L else 60_000L
+            val delayMillis = step - (now % step)
+            delay(delayMillis)
         }
     }
 
@@ -2345,7 +2440,7 @@ fun AnalogClockFace(
     val hours = calendar.get(Calendar.HOUR)
     val minutes = calendar.get(Calendar.MINUTE)
     val seconds = calendar.get(Calendar.SECOND)
-    val dateLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val dateLocale = ConfigurationCompat.getLocales(androidx.compose.ui.platform.LocalConfiguration.current)[0] ?: Locale.getDefault()
     val dateString = remember(currentTime, dateLocale) { formatClockDate(currentTime, dateLocale) }
 
     val currentBgColor = when (analogStyleIndex) {
@@ -2458,32 +2553,32 @@ fun AnalogClockFace(
 
                     val digitHeight = (minOf(width, height) * 0.16f).coerceIn(38.dp.toPx(), 54.dp.toPx())
 
-                    val aspect12 = if (painterAbw12.intrinsicSize.height > 0) painterAbw12.intrinsicSize.width / painterAbw12.intrinsicSize.height else 0.80f
+                    val aspect12 = if (painter12.intrinsicSize.height > 0) painter12.intrinsicSize.width / painter12.intrinsicSize.height else 0.80f
                     val w12 = digitHeight * aspect12
                     val y12 = 32.dp.toPx() + 8.dp.toPx() + digitHeight / 2f
                     translate(left = cx - w12 / 2f, top = y12 - digitHeight / 2f) {
-                        with(painterAbw12) { draw(size = Size(w12, digitHeight)) }
+                        with(painter12) { draw(size = Size(w12, digitHeight)) }
                     }
 
-                    val aspect6 = if (painterAbw6.intrinsicSize.height > 0) painterAbw6.intrinsicSize.width / painterAbw6.intrinsicSize.height else 0.65f
+                    val aspect6 = if (painter6.intrinsicSize.height > 0) painter6.intrinsicSize.width / painter6.intrinsicSize.height else 0.65f
                     val w6 = digitHeight * aspect6
                     val y6 = height - (32.dp.toPx() + 8.dp.toPx() + digitHeight / 2f)
                     translate(left = cx - w6 / 2f, top = y6 - digitHeight / 2f) {
-                        with(painterAbw6) { draw(size = Size(w6, digitHeight)) }
+                        with(painter6) { draw(size = Size(w6, digitHeight)) }
                     }
 
-                    val aspect9 = if (painterAbw9.intrinsicSize.height > 0) painterAbw9.intrinsicSize.width / painterAbw9.intrinsicSize.height else 0.65f
+                    val aspect9 = if (painter9.intrinsicSize.height > 0) painter9.intrinsicSize.width / painter9.intrinsicSize.height else 0.65f
                     val w9 = digitHeight * aspect9
                     val x9 = 32.dp.toPx() + 8.dp.toPx() + w9 / 2f
                     translate(left = x9 - w9 / 2f, top = cy - digitHeight / 2f) {
-                        with(painterAbw9) { draw(size = Size(w9, digitHeight)) }
+                        with(painter9) { draw(size = Size(w9, digitHeight)) }
                     }
 
-                    val aspect3 = if (painterAbw3.intrinsicSize.height > 0) painterAbw3.intrinsicSize.width / painterAbw3.intrinsicSize.height else 0.65f
+                    val aspect3 = if (painter3.intrinsicSize.height > 0) painter3.intrinsicSize.width / painter3.intrinsicSize.height else 0.65f
                     val w3 = digitHeight * aspect3
                     val x3 = width - (32.dp.toPx() + 8.dp.toPx() + w3 / 2f)
                     translate(left = x3 - w3 / 2f, top = cy - digitHeight / 2f) {
-                        with(painterAbw3) { draw(size = Size(w3, digitHeight)) }
+                        with(painter3) { draw(size = Size(w3, digitHeight)) }
                     }
 
                     val hourRad = (hourAngleDeg * (PI / 180f)).toFloat()
@@ -2585,38 +2680,38 @@ fun AnalogClockFace(
                     val digitHeight = (baseRadius * 0.30f).coerceIn(40.dp.toPx(), 62.dp.toPx())
                     val numberOffsetR = innerTrackR * 0.76f
 
-                    val aspect12 = if (painterOet12.intrinsicSize.height > 0) painterOet12.intrinsicSize.width / painterOet12.intrinsicSize.height else 0.85f
+                    val aspect12 = if (painter12.intrinsicSize.height > 0) painter12.intrinsicSize.width / painter12.intrinsicSize.height else 0.85f
                     val w12 = digitHeight * aspect12
                     val y12 = cy - numberOffsetR
                     translate(left = cx - w12 / 2f, top = y12 - digitHeight / 2f) {
-                        with(painterOet12) {
+                        with(painter12) {
                             draw(size = Size(w12, digitHeight), colorFilter = ColorFilter.tint(vintageGold))
                         }
                     }
 
-                    val aspect6 = if (painterOet6.intrinsicSize.height > 0) painterOet6.intrinsicSize.width / painterOet6.intrinsicSize.height else 0.65f
+                    val aspect6 = if (painter6.intrinsicSize.height > 0) painter6.intrinsicSize.width / painter6.intrinsicSize.height else 0.65f
                     val w6 = digitHeight * aspect6
                     val y6 = cy + numberOffsetR
                     translate(left = cx - w6 / 2f, top = y6 - digitHeight / 2f) {
-                        with(painterOet6) {
+                        with(painter6) {
                             draw(size = Size(w6, digitHeight), colorFilter = ColorFilter.tint(vintageGold))
                         }
                     }
 
-                    val aspect9 = if (painterOet9.intrinsicSize.height > 0) painterOet9.intrinsicSize.width / painterOet9.intrinsicSize.height else 0.65f
+                    val aspect9 = if (painter9.intrinsicSize.height > 0) painter9.intrinsicSize.width / painter9.intrinsicSize.height else 0.65f
                     val w9 = digitHeight * aspect9
                     val x9 = cx - numberOffsetR
                     translate(left = x9 - w9 / 2f, top = cy - digitHeight / 2f) {
-                        with(painterOet9) {
+                        with(painter9) {
                             draw(size = Size(w9, digitHeight), colorFilter = ColorFilter.tint(vintageGold))
                         }
                     }
 
-                    val aspect3 = if (painterOet3.intrinsicSize.height > 0) painterOet3.intrinsicSize.width / painterOet3.intrinsicSize.height else 0.65f
+                    val aspect3 = if (painter3.intrinsicSize.height > 0) painter3.intrinsicSize.width / painter3.intrinsicSize.height else 0.65f
                     val w3 = digitHeight * aspect3
                     val x3 = cx + numberOffsetR
                     translate(left = x3 - w3 / 2f, top = cy - digitHeight / 2f) {
-                        with(painterOet3) {
+                        with(painter3) {
                             draw(size = Size(w3, digitHeight), colorFilter = ColorFilter.tint(vintageGold))
                         }
                     }
@@ -2701,23 +2796,11 @@ fun AnalogClockFace(
                     val dotMinor = Color(0xFF4A403A)
 
                     val baseTrackR = baseRadius * 0.86f
-                    val squircleExponent = 3.6f
 
                     for (i in 0 until 60) {
-                        val angleDeg = i * 6f - 90f
-                        val angleRad = (angleDeg * (PI / 180f)).toFloat()
-                        val cosA = cos(angleRad)
-                        val sinA = sin(angleRad)
-
-                        val denominator = Math.pow(
-                            Math.pow(Math.abs(cosA.toDouble()), squircleExponent.toDouble()) +
-                                    Math.pow(Math.abs(sinA.toDouble()), squircleExponent.toDouble()),
-                            1.0 / squircleExponent
-                        ).toFloat()
-
-                        val squircleR = if (denominator > 0.001f) (baseTrackR / denominator) else baseTrackR
-                        val px = cx + squircleR * cosA
-                        val py = cy + squircleR * sinA
+                        val unitPt = squircleUnitPoints[i]
+                        val px = cx + baseTrackR * unitPt.x
+                        val py = cy + baseTrackR * unitPt.y
 
                         if (i % 5 == 0) {
                             drawCircle(
@@ -2737,38 +2820,38 @@ fun AnalogClockFace(
                     val digitHeight = (baseRadius * 0.28f).coerceIn(38.dp.toPx(), 58.dp.toPx())
                     val numberOffsetR = baseTrackR * 0.74f
 
-                    val aspect12 = if (painterZmg12.intrinsicSize.height > 0) painterZmg12.intrinsicSize.width / painterZmg12.intrinsicSize.height else 0.80f
+                    val aspect12 = if (painter12.intrinsicSize.height > 0) painter12.intrinsicSize.width / painter12.intrinsicSize.height else 0.80f
                     val w12 = digitHeight * aspect12
                     val y12 = cy - numberOffsetR
                     translate(left = cx - w12 / 2f, top = y12 - digitHeight / 2f) {
-                        with(painterZmg12) {
+                        with(painter12) {
                             draw(size = Size(w12, digitHeight), colorFilter = ColorFilter.tint(color12))
                         }
                     }
 
-                    val aspect6 = if (painterZmg6.intrinsicSize.height > 0) painterZmg6.intrinsicSize.width / painterZmg6.intrinsicSize.height else 0.65f
+                    val aspect6 = if (painter6.intrinsicSize.height > 0) painter6.intrinsicSize.width / painter6.intrinsicSize.height else 0.65f
                     val w6 = digitHeight * aspect6
                     val y6 = cy + numberOffsetR
                     translate(left = cx - w6 / 2f, top = y6 - digitHeight / 2f) {
-                        with(painterZmg6) {
+                        with(painter6) {
                             draw(size = Size(w6, digitHeight), colorFilter = ColorFilter.tint(color6))
                         }
                     }
 
-                    val aspect9 = if (painterZmg9.intrinsicSize.height > 0) painterZmg9.intrinsicSize.width / painterZmg9.intrinsicSize.height else 0.65f
+                    val aspect9 = if (painter9.intrinsicSize.height > 0) painter9.intrinsicSize.width / painter9.intrinsicSize.height else 0.65f
                     val w9 = digitHeight * aspect9
                     val x9 = cx - numberOffsetR
                     translate(left = x9 - w9 / 2f, top = cy - digitHeight / 2f) {
-                        with(painterZmg9) {
+                        with(painter9) {
                             draw(size = Size(w9, digitHeight), colorFilter = ColorFilter.tint(color9))
                         }
                     }
 
-                    val aspect3 = if (painterZmg3.intrinsicSize.height > 0) painterZmg3.intrinsicSize.width / painterZmg3.intrinsicSize.height else 0.65f
+                    val aspect3 = if (painter3.intrinsicSize.height > 0) painter3.intrinsicSize.width / painter3.intrinsicSize.height else 0.65f
                     val w3 = digitHeight * aspect3
                     val x3 = cx + numberOffsetR
                     translate(left = x3 - w3 / 2f, top = cy - digitHeight / 2f) {
-                        with(painterZmg3) {
+                        with(painter3) {
                             draw(size = Size(w3, digitHeight), colorFilter = ColorFilter.tint(color3))
                         }
                     }
@@ -3084,35 +3167,40 @@ fun FlipClockFace(
         mutableStateOf(prefs.getBoolean("pref_flip_show_sec", false))
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(showSeconds) {
         while (true) {
-            currentTime = System.currentTimeMillis()
-            delay(1000L)
+            val now = System.currentTimeMillis()
+            currentTime = now
+            val step = if (showSeconds) 1000L else 60_000L
+            val delayMillis = step - (now % step)
+            delay(delayMillis)
         }
     }
 
     val hourPattern = if (is24Hour) "HH" else "hh"
+    val flipDateObj = remember(currentTime) { Date(currentTime) }
     val hourString = remember(currentTime, is24Hour) {
-        SimpleDateFormat(hourPattern, Locale.US).format(Date(currentTime))
+        getCachedDateFormat(hourPattern, Locale.US).format(flipDateObj)
     }
     val minString = remember(currentTime) {
-        SimpleDateFormat("mm", Locale.US).format(Date(currentTime))
+        getCachedDateFormat("mm", Locale.US).format(flipDateObj)
     }
     val secString = remember(currentTime) {
-        SimpleDateFormat("ss", Locale.US).format(Date(currentTime))
+        getCachedDateFormat("ss", Locale.US).format(flipDateObj)
     }
     val isAM = remember(currentTime) {
         val cal = Calendar.getInstance().apply { timeInMillis = currentTime }
         cal.get(Calendar.AM_PM) == Calendar.AM
     }
-    val dateLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val dateLocale = ConfigurationCompat.getLocales(androidx.compose.ui.platform.LocalConfiguration.current)[0] ?: Locale.getDefault()
     val dateString = remember(currentTime, dateLocale) { formatClockDate(currentTime, dateLocale) }
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(horizontal = 36.dp, vertical = 14.dp)
+            .windowInsetsPadding(WindowInsets.displayCutout)
+            .padding(horizontal = 22.dp, vertical = 14.dp)
             .pointerInput(availableStyles, isUiLocked) {
                 awaitPointerEventScope {
                     var lastSingleTapTime = 0L
@@ -3170,16 +3258,16 @@ fun FlipClockFace(
                 }
             }
     ) {
-        val targetWidth = maxWidth * 0.78f
+        val targetWidth = maxWidth * 0.88f
 
         val widthDivider = if (showSeconds) {
-            if (is24Hour) 5.25f else 5.75f
+            if (is24Hour) 5.15f else 5.75f
         } else {
-            if (is24Hour) 3.35f else 3.85f
+            if (is24Hour) 3.25f else 3.85f
         }
 
         val calculatedCardHeight = targetWidth / widthDivider
-        val finalCardHeight = min(calculatedCardHeight, maxHeight * 0.82f)
+        val finalCardHeight = min(calculatedCardHeight, maxHeight * 0.83f)
 
         val animatedCardHeight by animateDpAsState(
             targetValue = finalCardHeight,
@@ -3252,7 +3340,7 @@ fun FlipClockFace(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 24.dp, bottom = 10.dp)
+                    .padding(start = 10.dp, bottom = 10.dp)
             )
         }
 
@@ -3264,7 +3352,7 @@ fun FlipClockFace(
                 fontWeight = FontWeight.Normal,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = 10.dp)
+                    .padding(end = 10.dp, bottom = 10.dp)
             )
         }
     }
@@ -3296,14 +3384,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
     }
 
     override fun enterLockedClock(): Boolean {
-        if (screenOffRequested || entryMode == ClockEntryMode.LOCK_SCREEN || hasHingeSensor || isFinishing || isDestroyed || getSystemService(PowerManager::class.java).isInteractive || ClockCycleStore(this).suppressed || ClockCycleStore(this).activeWindow() == null) return false
+        if (screenOffRequested || entryMode == ClockEntryMode.LOCK_SCREEN || hasHingeSensor || isFinishing || isDestroyed || (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive || ClockCycleStore(this).suppressed || ClockCycleStore(this).activeWindow() == null) return false
         val snapshot = LockedWindowSnapshot(entryMode,requestedOrientation,window.attributes.flags,window.attributes.screenBrightness,showClockScreen)
         lockedWindowSnapshot = snapshot
         entryMode = ClockEntryMode.LOCK_SCREEN
         showClockScreen = true
         lockPresentationAcknowledged = false
-        setShowWhenLocked(true)
-        setTurnScreenOn(true)
+        setClockShowWhenLocked(true)
+        setClockTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         requestedOrientation = preferredClockOrientation(this, hasHingeSensor)
         // Window flags are only a best-effort offer to this existing task. Never retry/wake in a loop.
@@ -3319,7 +3407,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
 
     private fun clearLockedWindow(restoreWake: Boolean = false) {
         sessionHandler.removeCallbacksAndMessages(null)
-        setShowWhenLocked(false); setTurnScreenOn(false)
+        setClockShowWhenLocked(false); setClockTurnScreenOn(false)
         val ownedFlags = WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         lockedWindowSnapshot?.let { snapshot ->
             val restoredFlags = if (restoreWake) snapshot.flags else
@@ -3333,7 +3421,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
     }
     private fun exitLockedClock() {
         ClockCycleStore(this).suppress()
-        getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(AutoClockService.OFFER_ID)
         clearLockedWindow()
         finish()
     }
@@ -3428,7 +3516,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
 
     private var hasHingeSensor = false
     private var isClamshell = false
-    private var lastRecordedHingeAngle: Float = -1f
+    private var lastRecordedHingeAngle by mutableFloatStateOf(-1f)
     private var isNonFoldableBypassed = false
 
     private var foldState by mutableStateOf("--°")
@@ -3449,8 +3537,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) {
             ClockCycleStore(this).onExplicitUserEntry(
-                getSystemService(PowerManager::class.java).isInteractive,
-                getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+                (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive,
+                (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked)
         }
         enableEdgeToEdge()
 
@@ -3459,19 +3547,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
         window.statusBarColor = AndroidGraphicsColor.BLACK
         window.navigationBarColor = AndroidGraphicsColor.BLACK
 
-        // 允許畫面延伸至挖孔/瀏海區域
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-                } else {
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                }
-            }
-        }
+        applyDisplayCutoutMode(window, getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
+            .getBoolean("pref_extend_cutout", true))
 
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        hingeAngleSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)
+        hingeAngleSensor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) sensorManager.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE) else null
         hasHingeSensor = (hingeAngleSensor != null)
 
         if (!hasHingeSensor) {
@@ -3486,7 +3566,23 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
         }
 
         setContent {
+            val baseDensity = LocalDensity.current
+            val clampedDensity = remember(baseDensity) {
+                androidx.compose.ui.unit.Density(baseDensity.density, baseDensity.fontScale.coerceAtMost(1.15f))
+            }
+            CompositionLocalProvider(LocalDensity provides clampedDensity) {
             MaterialTheme(colorScheme = DeskClockColorScheme) {
+                val appPrefs = remember { getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE) }
+                var showLegacyAndroidDialog by remember {
+                    mutableStateOf(Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2 &&
+                        !appPrefs.getBoolean("pref_dismiss_legacy_android_notice", false))
+                }
+                if (showLegacyAndroidDialog && entryMode != ClockEntryMode.LOCK_SCREEN) {
+                    LegacyAndroidNoticeDialog(onDismiss = {
+                        showLegacyAndroidDialog = false
+                        appPrefs.edit().putBoolean("pref_dismiss_legacy_android_notice", true).apply()
+                    })
+                }
                 BackHandler(enabled = showClockScreen) {
                     if (entryMode == ClockEntryMode.LOCK_SCREEN) { exitLockedClock(); return@BackHandler }
                     val prefs = getSharedPreferences("desk_clock_prefs", Context.MODE_PRIVATE)
@@ -3521,11 +3617,13 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
                 } else if (!showClockScreen) {
                     InitialScreen(
                         hasHingeSensor = hasHingeSensor,
-                        isClamshell = isClamshell || (hasHingeSensor && isTallAspectRatio()),
+                        isClamshell = hasHingeSensor && isTallAspectRatio() && lastRecordedHingeAngle !in 0f..45f,
+                        shouldPromptClamshell = hasHingeSensor && isTallAspectRatio() &&
+                            (lastRecordedHingeAngle >= 160f || lastRecordedHingeAngle < 0f),
                         onEnterClockDirectly = {
                             ClockCycleStore(this).onExplicitUserEntry(
-                                getSystemService(PowerManager::class.java).isInteractive,
-                                getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+                                (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive,
+                                (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked)
                             entryMode = ClockEntryMode.MANUAL
                             isNonFoldableBypassed = true
                             showClockScreen = true
@@ -3535,20 +3633,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
                 }
             }
         }
+        }
     }
 
 
     override fun onResume() {
         super.onResume()
         if (screenOffRequested || isFinishing) return
-        val keyguard = getSystemService(KeyguardManager::class.java)
-        val activelyUnlocked = getSystemService(PowerManager::class.java).isInteractive && !keyguard.isKeyguardLocked
+        val keyguard = (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager)
+        val activelyUnlocked = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive && !keyguard.isKeyguardLocked
         if (entryMode == ClockEntryMode.LOCK_SCREEN) {
             if (activelyUnlocked) { ClockCycleStore(this).observeUnlocked(); clearLockedWindow(); finish(); return }
             lockPresentationAcknowledged = true
             sessionHandler.removeCallbacksAndMessages(null)
             ClockCycleStore(this).invalidateOffer()
-            getSystemService(NotificationManager::class.java).cancel(AutoClockService.OFFER_ID)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(AutoClockService.OFFER_ID)
         } else if (!hasHingeSensor && activelyUnlocked) {
             ClockCycleStore(this).observeUnlocked()
             ClockActivationHost.attach(this)
@@ -3584,7 +3683,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
 
     override fun onPause() {
         super.onPause()
-        if (entryMode == ClockEntryMode.LOCK_SCREEN) setTurnScreenOn(false)
+        if (entryMode == ClockEntryMode.LOCK_SCREEN) setClockTurnScreenOn(false)
         // 若處於外螢幕時鐘畫面，保留感應器監聽以確保能感應後續展開動作
         if (!showClockScreen) {
             sensorManager.unregisterListener(this)
@@ -3595,7 +3694,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
         super.onStop()
         clockUiVisible = false
         sensorManager.unregisterListener(this)
-        if(getSystemService(PowerManager::class.java).isInteractive) ClockActivationHost.detach(this)
+        if((getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive) ClockActivationHost.detach(this)
         if(entryMode == ClockEntryMode.LOCK_SCREEN) {
             if(lockPresentationAcknowledged && !isChangingConfigurations && !isFinishing) exitLockedClock()
             return
@@ -3702,6 +3801,266 @@ class MainActivity : AppCompatActivity(), SensorEventListener, ClockActivationHo
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
                 controller.show(WindowInsetsCompat.Type.systemBars())
             }
+        }
+    }
+}
+
+private val cachedDateFormats = mutableMapOf<String, SimpleDateFormat>()
+
+tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+private fun getCachedDateFormat(pattern: String, locale: Locale = Locale.US): SimpleDateFormat {
+    val key = "$pattern|${locale.toLanguageTag()}"
+    return cachedDateFormats.getOrPut(key) {
+        SimpleDateFormat(pattern, locale)
+    }.apply { timeZone = java.util.TimeZone.getDefault() }
+}
+
+fun applyDisplayCutoutMode(window: Window?, extendCutout: Boolean) {
+    if (window == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+    window.attributes = window.attributes.apply {
+        layoutInDisplayCutoutMode = if (extendCutout) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            } else {
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        } else {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+        }
+    }
+}
+
+@Composable
+fun MaterialSettingsIcon(
+    modifier: Modifier = Modifier,
+    color: Color = Color.White
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        val cy = h / 2f
+
+        val ringRadius = w * 0.28f
+        val ringStroke = w * 0.13f
+        val toothStart = ringRadius
+        val toothEnd = w * 0.40f
+        val toothStroke = w * 0.13f
+
+        // 1. 繪製外圈 8 個齒輪齒
+        for (i in 0 until 8) {
+            val angleRad = (i * 45f) * (PI / 180f).toFloat()
+            val cosA = cos(angleRad)
+            val sinA = sin(angleRad)
+            drawLine(
+                color = color,
+                start = Offset(cx + toothStart * cosA, cy + toothStart * sinA),
+                end = Offset(cx + toothEnd * cosA, cy + toothEnd * sinA),
+                strokeWidth = toothStroke,
+                cap = StrokeCap.Round
+            )
+        }
+
+        // 2. 繪製齒輪主體圓環（中央自然鏤空）
+        drawCircle(
+            color = color,
+            radius = ringRadius,
+            center = Offset(cx, cy),
+            style = Stroke(width = ringStroke)
+        )
+    }
+}
+
+@Composable
+fun LegacyAndroidNoticeDialog(
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF1E1E22)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.legacy_android_dialog_title),
+                    color = Color.White,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = stringResource(R.string.legacy_android_dialog_desc),
+                    color = Color(0xFFC4C4CC),
+                    fontSize = 13.5.sp,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
+
+                Surface(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF81C7D4),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.legacy_android_dialog_btn_ok),
+                            color = Color(0xFF041E49),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ClamshellNoticeDialog(
+    onDismiss: () -> Unit,
+    onFallbackToNonFoldable: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF1E1E22)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 1. 標題
+                Text(
+                    text = stringResource(R.string.clamshell_notice_title),
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 2. 說明文字
+                Text(
+                    text = stringResource(R.string.clamshell_notice_desc),
+                    color = Color(0xFFC4C4CC),
+                    fontSize = 13.5.sp,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
+
+                // 3. 我試試看按鈕
+                Surface(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF81C7D4),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.clamshell_notice_btn_try),
+                            color = Color(0xFF041E49),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 4. 外螢幕無法正常顯示按鈕（直接觸發「真可惜呢」對話框）
+                Surface(
+                    onClick = {
+                        onDismiss()
+                        onFallbackToNonFoldable()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF2C2C34),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.clamshell_notice_btn_fail),
+                            color = Color(0xFFE57373),
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@androidx.annotation.RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private fun Modifier.applyTiramisuBurnInShader(phase: Int): Modifier = composed {
+    val shader = remember {
+        RuntimeShader(
+            """
+            uniform shader composable;
+            uniform float phase;
+
+            half4 main(float2 fragCoord) {
+                float check = mod(floor(fragCoord.x) + floor(fragCoord.y) + phase, 2.0);
+                if (check < 1.0) {
+                    return composable.eval(fragCoord);
+                }
+                return half4(0.0, 0.0, 0.0, 1.0);
+            }
+            """.trimIndent()
+        )
+    }
+
+    graphicsLayer {
+        try {
+            shader.setFloatUniform("phase", phase.toFloat())
+            renderEffect = RenderEffect
+                .createRuntimeShaderEffect(shader, "composable")
+                .asComposeRenderEffect()
+        } catch (e: Throwable) {
+            renderEffect = null
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.Application
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
@@ -18,10 +20,10 @@ class ClockApplication : Application() {
         ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
             override fun onReceive(context: Context,intent: Intent) {
                 if(intent.action == Intent.ACTION_SCREEN_OFF) {
-                    if(!getSystemService(PowerManager::class.java).isInteractive) ClockCycleStore(this@ClockApplication).noteLock()
+                    if(!clockSystemService(PowerManager::class.java).isInteractive) ClockCycleStore(this@ClockApplication).noteLock()
                     return
                 }
-                if(intent.action == Intent.ACTION_USER_PRESENT && getSystemService(PowerManager::class.java).isInteractive && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+                if(intent.action == Intent.ACTION_USER_PRESENT && clockSystemService(PowerManager::class.java).isInteractive && !clockSystemService(KeyguardManager::class.java).isKeyguardLocked) {
                     ClockCycleStore(this@ClockApplication).onUnlock()
                     com.linzin.linzindeskclock.autostart.ClockActivationHost.onDeviceUnlocked()
                 }

@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.autostart
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -14,8 +16,8 @@ class BackgroundClockLauncher(private val context: Context) {
         val cycle = ClockCycleStore(context)
         if(token.isBlank() || !BackgroundClockLaunchPolicy.canLaunch(
             settings.enabled,settings.automaticLaunch,BackgroundLaunchAccess.granted(context),
-            cycle.isCurrentWindow(window),context.getSystemService(PowerManager::class.java).isInteractive,
-            context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+            cycle.isCurrentWindow(window),context.clockSystemService(PowerManager::class.java).isInteractive,
+            context.clockSystemService(KeyguardManager::class.java).isKeyguardLocked
         )) return false
         return try {
             context.startActivity(Intent(context,ClockSessionActivity::class.java)

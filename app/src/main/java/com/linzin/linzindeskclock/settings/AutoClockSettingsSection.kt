@@ -1,5 +1,7 @@
 package com.linzin.linzindeskclock.settings
 
+import com.linzin.linzindeskclock.compat.clockSystemService
+
 import android.Manifest
 import android.app.KeyguardManager
 import android.app.NotificationManager
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -36,11 +39,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
     val context=LocalContext.current
+    val monitoringSupported=Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
     val owner=LocalLifecycleOwner.current
     val settings=remember { AutoClockPreferences(context) }
     val foldable=hasHingeSensor || context.packageManager.hasSystemFeature("android.hardware.sensor.hinge_angle")
     val hasTilt=remember {
-        val sensors=context.getSystemService(android.hardware.SensorManager::class.java)
+        val sensors=context.clockSystemService(android.hardware.SensorManager::class.java)
         sensors.getDefaultSensor(android.hardware.Sensor.TYPE_GRAVITY)!=null || sensors.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)!=null
     }
     var enabled by remember { mutableStateOf(settings.enabled) }
@@ -52,7 +56,7 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
     var explainAccess by remember { mutableStateOf(false) }
     var lastResult by remember { mutableStateOf(settings.lastActivation) }
     val startMonitor: () -> Unit = {
-        if(settings.enabled) {
+        if(settings.enabled && monitoringSupported) {
             startFailed=try { ContextCompat.startForegroundService(context,Intent(context,AutoClockService::class.java)); false }
                 catch (_:RuntimeException) { true }
         }
@@ -61,8 +65,8 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
     val notificationRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { startMonitor() }
     val noteExplicitEntry: () -> Unit = {
         com.linzin.linzindeskclock.autostart.ClockCycleStore(context).onExplicitUserEntry(
-            context.getSystemService(android.os.PowerManager::class.java).isInteractive,
-            context.getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+            context.clockSystemService(android.os.PowerManager::class.java).isInteractive,
+            context.clockSystemService(KeyguardManager::class.java).isKeyguardLocked)
     }
     val enableMonitor: () -> Unit = {
         noteExplicitEntry()
@@ -85,17 +89,20 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
         onDispose { owner.lifecycle.removeObserver(observer); settings.preferences.unregisterOnSharedPreferenceChangeListener(preferencesListener) }
     }
     LaunchedEffect(enabled,revision) { delay(500); running=AutoClockService.running }
-    val manager=context.getSystemService(NotificationManager::class.java)
+    val manager=context.clockSystemService(NotificationManager::class.java)
     val specialAccess=remember(revision) { BackgroundLaunchAccess.granted(context) }
     val notificationAccess=remember(revision) { MediaNotificationAccess.isGranted(context) }
-    val noticesAllowed=remember(revision) { manager.areNotificationsEnabled() && manager.getNotificationChannel(AutoClockService.OFFER_CHANNEL)?.importance!=NotificationManager.IMPORTANCE_NONE }
+    val noticesAllowed=remember(revision) {
+        NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || manager.getNotificationChannel(AutoClockService.OFFER_CHANNEL)?.importance!=NotificationManager.IMPORTANCE_NONE)
+    }
 
     Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.auto_title),fontSize=20.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.primary)
         Text(stringResource(R.string.auto_description),fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment=Alignment.CenterVertically) {
             Text(stringResource(R.string.auto_enable),Modifier.weight(1f))
-            Switch(checked=enabled,enabled=(!foldable && hasTilt)||enabled,onCheckedChange={ value ->
+            Switch(checked=enabled && monitoringSupported,enabled=monitoringSupported && ((!foldable && hasTilt)||enabled),onCheckedChange={ value ->
                 if(value) enableMonitor() else {
                     enabled=false; settings.enabled=false
                     context.stopService(Intent(context,AutoClockService::class.java)); revision++
@@ -103,16 +110,18 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
             })
         }
         if(foldable) Text(stringResource(R.string.auto_foldable_unchanged),fontSize=13.sp)
+        if(!monitoringSupported) Text(stringResource(R.string.auto_legacy_unsupported),fontSize=13.sp)
         if(!hasTilt) Text(stringResource(R.string.auto_sensor_missing),fontSize=13.sp)
         Row(verticalAlignment=Alignment.CenterVertically) {
             Text(stringResource(R.string.auto_background_enable),Modifier.weight(1f))
-            Switch(checked=automatic,enabled=!foldable && hasTilt,onCheckedChange={ value ->
+            Switch(checked=automatic && monitoringSupported,enabled=monitoringSupported && !foldable && hasTilt,onCheckedChange={ value ->
                 if(value) explainAccess=true else { automatic=false; settings.automaticLaunch=false; revision++ }
             })
         }
         Text(stringResource(if(specialAccess) R.string.auto_background_granted else R.string.auto_background_missing),fontSize=13.sp)
-        if(automatic && !specialAccess) Button(onClick={ explainAccess=true }) { Text(stringResource(R.string.auto_background_setup)) }
+        if(monitoringSupported && automatic && !specialAccess) Button(onClick={ explainAccess=true }) { Text(stringResource(R.string.auto_background_setup)) }
         Text(stringResource(when {
+            !monitoringSupported -> R.string.auto_legacy_unsupported
             !enabled -> R.string.auto_status_disabled
             startFailed -> R.string.auto_status_failed
             !running -> R.string.auto_status_restart
@@ -120,8 +129,12 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
             !noticesAllowed -> R.string.auto_status_notifications
             else -> R.string.auto_status_ready
         }),fontSize=13.sp)
-        if(enabled && !running) TextButton(onClick={ noteExplicitEntry(); startMonitor() }) { Text(stringResource(R.string.auto_restart)) }
-        if(!noticesAllowed) TextButton(onClick={ openSetup(context,Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName)) }) {
+        if(monitoringSupported && enabled && !running) TextButton(onClick={ noteExplicitEntry(); startMonitor() }) { Text(stringResource(R.string.auto_restart)) }
+        if(!noticesAllowed) TextButton(onClick={
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName)
+            else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+context.packageName))
+            openSetup(context,intent)
+        }) {
             Text(stringResource(R.string.auto_notification_setup))
         }
         val resultLabel=when(lastResult) {
@@ -165,6 +178,6 @@ fun AutoClockSettingsSection(hasHingeSensor: Boolean) {
 
 private fun showUnavailable(context: Context) { android.widget.Toast.makeText(context,R.string.auto_settings_unavailable,android.widget.Toast.LENGTH_LONG).show() }
 private fun openSetup(context:Context,intent:Intent) {
-    if(context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
+    if(context.clockSystemService(KeyguardManager::class.java).isKeyguardLocked) return
     try { context.startActivity(intent) } catch (_:RuntimeException) { showUnavailable(context) }
 }
